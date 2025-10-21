@@ -28,11 +28,23 @@ Input (640×640) → Backbone (YOLOv9c) → Neck (PSEM + TAFM) → Head (SDWH) �
 
 ## 🚀 Quick Start
 
-### Installation
+### Option 1: Google Colab (Recommended - Free GPU!) ⚡
+
+**Fastest way to get started with GPU acceleration:**
+
+1. Open in Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kshitijkhede/YOLO-UDD-v2.0/blob/main/YOLO_UDD_Training.ipynb)
+2. Enable GPU: Runtime → Change runtime type → GPU
+3. Run all cells!
+
+**Training time:** ~2 minutes for 50 epochs (vs ~25 minutes on CPU)
+
+📖 See [COLAB_GUIDE.md](COLAB_GUIDE.md) for detailed instructions.
+
+### Option 2: Local Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/YOLO-UDD-v2.0.git
+git clone https://github.com/kshitijkhede/YOLO-UDD-v2.0.git
 cd YOLO-UDD-v2.0
 
 # Create virtual environment
