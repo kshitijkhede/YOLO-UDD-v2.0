@@ -119,15 +119,20 @@ class YOLOUDDNeck(nn.Module):
     def __init__(self, channels_list=[128, 256, 512, 1024]):
         super(YOLOUDDNeck, self).__init__()
         
+        # Lateral connections to reduce channels before concatenation
+        self.lateral5 = ConvModule(1024, 512, 1, 1, 0)  # 1x1 conv to match p5 channels
+        self.lateral4 = ConvModule(512, 256, 1, 1, 0)   # 1x1 conv to match p4 channels
+        self.lateral3 = ConvModule(256, 128, 1, 1, 0)   # 1x1 conv to match p3 channels
+        
         # Top-down pathway with PSEM
         self.up1 = nn.Upsample(scale_factor=2, mode='nearest')
-        self.psem1 = PSEM(1024 + 512, 512)
+        self.psem1 = PSEM(512 + 512, 512)
         
         self.up2 = nn.Upsample(scale_factor=2, mode='nearest')
-        self.psem2 = PSEM(512 + 256, 256)
+        self.psem2 = PSEM(256 + 256, 256)
         
         self.up3 = nn.Upsample(scale_factor=2, mode='nearest')
-        self.psem3 = PSEM(256 + 128, 128)
+        self.psem3 = PSEM(128 + 128, 128)
         
         # Bottom-up pathway with PSEM
         self.down1 = ConvModule(128, 128, 3, 2, 1)
@@ -150,18 +155,24 @@ class YOLOUDDNeck(nn.Module):
         """
         p3, p4, p5, p6 = features
         
-        # Top-down pathway
-        x = self.up1(p6)
-        x = torch.cat([x, p5], dim=1)
-        p5_out = self.psem1(x)
+        # Top-down pathway with lateral connections
+        # p6: 20x20, 1024ch -> reduce to 512ch
+        x = self.lateral5(p6)
+        x = self.up1(x)  # 40x40, 512ch
+        x = torch.cat([x, p5], dim=1)  # 40x40, 1024ch
+        p5_out = self.psem1(x)  # 40x40, 512ch
         
-        x = self.up2(p5_out)
-        x = torch.cat([x, p4], dim=1)
-        p4_out = self.psem2(x)
+        # Reduce p5_out channels before upsampling
+        x = self.lateral4(p5_out)  # 40x40, 256ch
+        x = self.up2(x)  # 80x80, 256ch
+        x = torch.cat([x, p4], dim=1)  # 80x80, 512ch
+        p4_out = self.psem2(x)  # 80x80, 256ch
         
-        x = self.up3(p4_out)
-        x = torch.cat([x, p3], dim=1)
-        p3_out = self.psem3(x)
+        # Reduce p4_out channels before upsampling
+        x = self.lateral3(p4_out)  # 80x80, 128ch
+        x = self.up3(x)  # 160x160, 128ch
+        x = torch.cat([x, p3], dim=1)  # 160x160, 256ch
+        p3_out = self.psem3(x)  # 160x160, 128ch
         
         # Bottom-up pathway
         x = self.down1(p3_out)
