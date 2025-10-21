@@ -289,7 +289,21 @@ def main():
     
     # Load config
     if os.path.exists(args.config):
-        config = load_config(args.config)
+        yaml_config = load_config(args.config)
+        # Flatten nested YAML structure
+        config = {
+            'num_classes': yaml_config.get('model', {}).get('num_classes', 3),
+            'pretrained_path': yaml_config.get('model', {}).get('pretrained_path', None),
+            'data_dir': yaml_config.get('data', {}).get('data_dir', 'data/trashcan'),
+            'img_size': yaml_config.get('data', {}).get('img_size', 640),
+            'batch_size': yaml_config.get('training', {}).get('batch_size', 16),
+            'epochs': yaml_config.get('training', {}).get('epochs', 300),
+            'learning_rate': yaml_config.get('training', {}).get('learning_rate', 0.01),
+            'weight_decay': yaml_config.get('training', {}).get('weight_decay', 0.0005),
+            'num_workers': yaml_config.get('training', {}).get('num_workers', 4),
+            'early_stopping_patience': yaml_config.get('training', {}).get('early_stopping_patience', 20),
+            'save_dir': 'runs/train'
+        }
     else:
         # Default configuration as per Section 5.2
         config = {

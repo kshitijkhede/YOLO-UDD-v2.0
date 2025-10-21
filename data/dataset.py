@@ -70,7 +70,7 @@ class TrashCanDataset(Dataset):
                 A.HorizontalFlip(p=0.5),
                 A.VerticalFlip(p=0.2),
                 A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=15, p=0.5),
-                A.RandomResizedCrop(height=self.img_size, width=self.img_size, scale=(0.8, 1.0), p=0.5),
+                A.RandomResizedCrop(height=self.img_size, width=self.img_size, size=(self.img_size, self.img_size), scale=(0.8, 1.0), p=0.5),
                 
                 # Underwater-specific photometric augmentations
                 # Simulate color casting at depth
