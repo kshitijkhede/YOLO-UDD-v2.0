@@ -32,11 +32,11 @@ Input (640×640) → Backbone (YOLOv9c) → Neck (PSEM + TAFM) → Head (SDWH) �
 
 **Fastest way to get started with GPU acceleration:**
 
-1. Open in Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kshitijkhede/YOLO-UDD-v2.0/blob/main/YOLO_UDD_Training.ipynb)
-2. Enable GPU: Runtime → Change runtime type → GPU
-3. Run all cells!
+1. Open in Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kshitijkhede/YOLO-UDD-v2.0/blob/main/YOLO_UDD_Colab.ipynb)
+2. Enable GPU: Runtime → Change runtime type → GPU (T4)
+3. Run all cells! (Runtime → Run all)
 
-**Training time:** ~2 minutes for 50 epochs (vs ~25 minutes on CPU)
+**Training time:** ~2-3 minutes for 10 epochs with GPU (vs ~20-25 minutes on CPU)
 
 📖 See [COLAB_GUIDE.md](COLAB_GUIDE.md) for detailed instructions.
 
