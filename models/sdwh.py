@@ -140,65 +140,79 @@ class SDWH(nn.Module):
     suppressing background noise.
     
     Args:
-        channels (int): Number of input channels
+        channels_list (list): List of channel counts for each pyramid level [128, 256, 512]
         num_classes (int): Number of detection classes
         num_levels (int): Number of feature pyramid levels
     """
     
-    def __init__(self, channels, num_classes=3, num_levels=3):
+    def __init__(self, channels_list=[128, 256, 512], num_classes=3, num_levels=3):
         super(SDWH, self).__init__()
         
         self.num_classes = num_classes
         self.num_levels = num_levels
+        self.channels_list = channels_list
         
-        # Three-stage attention cascade
+        # Three-stage attention cascade (one per level)
         self.level_attention = LevelWiseAttention(num_levels)
-        self.spatial_attention = SpatialWiseAttention(channels)
-        self.channel_attention = ChannelWiseAttention(channels)
         
-        # Detection heads for each task
-        # Bounding box regression head
-        self.bbox_head = nn.Sequential(
-            nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(channels),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(channels, 4, 1)  # (x, y, w, h)
-        )
+        # Create separate attention and detection heads for each pyramid level
+        self.spatial_attentions = nn.ModuleList([
+            SpatialWiseAttention(ch) for ch in channels_list
+        ])
+        self.channel_attentions = nn.ModuleList([
+            ChannelWiseAttention(ch) for ch in channels_list
+        ])
         
-        # Objectness head
-        self.obj_head = nn.Sequential(
-            nn.Conv2d(channels, channels // 2, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(channels // 2),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(channels // 2, 1, 1),
-            nn.Sigmoid()
-        )
+        # Detection heads for each task (one set per level)
+        # Bounding box regression heads
+        self.bbox_heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(ch, ch, 3, 1, 1, bias=False),
+                nn.BatchNorm2d(ch),
+                nn.SiLU(inplace=True),
+                nn.Conv2d(ch, 4, 1)  # (x, y, w, h)
+            ) for ch in channels_list
+        ])
         
-        # Classification head
-        self.cls_head = nn.Sequential(
-            nn.Conv2d(channels, channels, 3, 1, 1, bias=False),
-            nn.BatchNorm2d(channels),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(channels, num_classes, 1)
-        )
+        # Objectness heads
+        self.obj_heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(ch, ch // 2, 3, 1, 1, bias=False),
+                nn.BatchNorm2d(ch // 2),
+                nn.SiLU(inplace=True),
+                nn.Conv2d(ch // 2, 1, 1),
+                nn.Sigmoid()
+            ) for ch in channels_list
+        ])
         
-    def forward_single(self, x):
+        # Classification heads
+        self.cls_heads = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(ch, ch, 3, 1, 1, bias=False),
+                nn.BatchNorm2d(ch),
+                nn.SiLU(inplace=True),
+                nn.Conv2d(ch, num_classes, 1)
+            ) for ch in channels_list
+        ])
+        
+    def forward_single(self, x, level_idx):
         """
         Forward pass for a single feature map
         
         Args:
             x (torch.Tensor): Input feature map [B, C, H, W]
+            level_idx (int): Index of the pyramid level
         Returns:
             tuple: (bbox_pred, obj_pred, cls_pred)
         """
         # Apply cascaded attention
-        x = self.spatial_attention(x)
-        x = self.channel_attention(x)
+        x = self.spatial_attentions[level_idx](x)
+        x = self.channel_attentions[level_idx](x)
         
         # Generate predictions
-        bbox_pred = self.bbox_head(x)
-        obj_pred = self.obj_head(x)
-        cls_pred = self.cls_head(x)
+        bbox_pred = self.bbox_heads[level_idx](x)
+        obj_pred = self.obj_heads[level_idx](x)
+        cls_pred = self.cls_heads[level_idx](x)
         
         return bbox_pred, obj_pred, cls_pred
     
@@ -216,8 +230,8 @@ class SDWH(nn.Module):
         
         # Process each level through spatial and channel attention + detection heads
         predictions = []
-        for feat in weighted_features:
-            pred = self.forward_single(feat)
+        for idx, feat in enumerate(weighted_features):
+            pred = self.forward_single(feat, idx)
             predictions.append(pred)
         
         return predictions

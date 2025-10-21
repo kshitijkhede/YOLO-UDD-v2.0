@@ -120,13 +120,13 @@ class YOLOUDDNeck(nn.Module):
         super(YOLOUDDNeck, self).__init__()
         
         # Lateral connections to reduce channels before concatenation
-        self.lateral5 = ConvModule(1024, 512, 1, 1, 0)  # 1x1 conv to match p5 channels
+        self.lateral6 = ConvModule(1024, 512, 1, 1, 0)  # Reduce p6 channels to match p5
         self.lateral4 = ConvModule(512, 256, 1, 1, 0)   # 1x1 conv to match p4 channels
         self.lateral3 = ConvModule(256, 128, 1, 1, 0)   # 1x1 conv to match p3 channels
         
         # Top-down pathway with PSEM
-        self.up1 = nn.Upsample(scale_factor=2, mode='nearest')
-        self.psem1 = PSEM(512 + 512, 512)
+        # No upsample for p6->p5 since they're the same spatial size (20x20)
+        self.psem1 = PSEM(512 + 512, 512)  # Merge p6 and p5
         
         self.up2 = nn.Upsample(scale_factor=2, mode='nearest')
         self.psem2 = PSEM(256 + 256, 256)
@@ -156,23 +156,22 @@ class YOLOUDDNeck(nn.Module):
         p3, p4, p5, p6 = features
         
         # Top-down pathway with lateral connections
-        # p6: 20x20, 1024ch -> reduce to 512ch
-        x = self.lateral5(p6)
-        x = self.up1(x)  # 40x40, 512ch
-        x = torch.cat([x, p5], dim=1)  # 40x40, 1024ch
-        p5_out = self.psem1(x)  # 40x40, 512ch
+        # p6 and p5 are both 20x20, so we concatenate without upsampling
+        x = self.lateral6(p6)  # 20x20, 512ch
+        x = torch.cat([x, p5], dim=1)  # 20x20, 1024ch
+        p5_out = self.psem1(x)  # 20x20, 512ch
         
-        # Reduce p5_out channels before upsampling
-        x = self.lateral4(p5_out)  # 40x40, 256ch
-        x = self.up2(x)  # 80x80, 256ch
-        x = torch.cat([x, p4], dim=1)  # 80x80, 512ch
-        p4_out = self.psem2(x)  # 80x80, 256ch
+        # Reduce p5_out channels before upsampling to 40x40
+        x = self.lateral4(p5_out)  # 20x20, 256ch
+        x = self.up2(x)  # 40x40, 256ch
+        x = torch.cat([x, p4], dim=1)  # 40x40, 512ch
+        p4_out = self.psem2(x)  # 40x40, 256ch
         
-        # Reduce p4_out channels before upsampling
-        x = self.lateral3(p4_out)  # 80x80, 128ch
-        x = self.up3(x)  # 160x160, 128ch
-        x = torch.cat([x, p3], dim=1)  # 160x160, 256ch
-        p3_out = self.psem3(x)  # 160x160, 128ch
+        # Reduce p4_out channels before upsampling to 80x80
+        x = self.lateral3(p4_out)  # 40x40, 128ch
+        x = self.up3(x)  # 80x80, 128ch
+        x = torch.cat([x, p3], dim=1)  # 80x80, 256ch
+        p3_out = self.psem3(x)  # 80x80, 128ch
         
         # Bottom-up pathway
         x = self.down1(p3_out)
@@ -216,8 +215,8 @@ class YOLOUD(nn.Module):
         # Neck with PSEM and TAFM
         self.neck = YOLOUDDNeck()
         
-        # Detection head with SDWH
-        self.head = SDWH(channels=256, num_classes=num_classes, num_levels=3)
+        # Detection head with SDWH - accepts list of channels for each pyramid level
+        self.head = SDWH(channels_list=[128, 256, 512], num_classes=num_classes, num_levels=3)
         
         # Initialize weights
         self._initialize_weights()
