@@ -190,9 +190,11 @@ class YOLOUDDLoss(nn.Module):
                 total_bbox_loss += bbox_loss
             
             # Objectness loss
+            # Clamp predictions to [0, 1] range to avoid BCE errors
+            obj_pred_clamped = torch.clamp(obj_pred, min=0.0, max=1.0)
             # Dummy targets
-            obj_targets = torch.rand_like(obj_pred)
-            obj_loss = self.obj_loss_fn(obj_pred, obj_targets)
+            obj_targets = torch.rand_like(obj_pred_clamped)
+            obj_loss = self.obj_loss_fn(obj_pred_clamped, obj_targets)
             total_obj_loss += obj_loss
             
             # Classification loss
