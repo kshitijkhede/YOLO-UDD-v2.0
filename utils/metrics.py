@@ -1,270 +1,249 @@
 """
-Evaluation Metrics for YOLO-UDD v2.0
-Implements mAP@50, mAP@50:95, Precision, Recall, and FPS metrics
-As described in Section 5.3
+COCO-style Evaluation Metrics for YOLO-UDD v2.0
+Implements proper mAP@50, mAP@50:95, Precision, Recall
 """
 
 import torch
 import numpy as np
 from collections import defaultdict
-import time
 
 
-def box_iou(box1, box2):
+def box_iou_xyxy(boxes1, boxes2):
     """
-    Calculate IoU between two sets of boxes
+    Compute IoU between two sets of boxes in (x1, y1, x2, y2) format
     
     Args:
-        box1: [N, 4] (x1, y1, x2, y2)
-        box2: [M, 4] (x1, y1, x2, y2)
+        boxes1: [N, 4] torch tensor
+        boxes2: [M, 4] torch tensor
     
     Returns:
-        iou: [N, M]
+        iou: [N, M] IoU matrix
     """
-    area1 = (box1[:, 2] - box1[:, 0]) * (box1[:, 3] - box1[:, 1])
-    area2 = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])
+    area1 = (boxes1[:, 2] - boxes1[:, 0]) * (boxes1[:, 3] - boxes1[:, 1])
+    area2 = (boxes2[:, 2] - boxes2[:, 0]) * (boxes2[:, 3] - boxes2[:, 1])
     
-    inter_x1 = torch.maximum(box1[:, None, 0], box2[:, 0])
-    inter_y1 = torch.maximum(box1[:, None, 1], box2[:, 1])
-    inter_x2 = torch.minimum(box1[:, None, 2], box2[:, 2])
-    inter_y2 = torch.minimum(box1[:, None, 3], box2[:, 3])
+    inter_x1 = torch.maximum(boxes1[:, None, 0], boxes2[:, 0])
+    inter_y1 = torch.maximum(boxes1[:, None, 1], boxes2[:, 1])
+    inter_x2 = torch.minimum(boxes1[:, None, 2], boxes2[:, 2])
+    inter_y2 = torch.minimum(boxes1[:, None, 3], boxes2[:, 3])
     
     inter_area = torch.clamp(inter_x2 - inter_x1, min=0) * torch.clamp(inter_y2 - inter_y1, min=0)
     union_area = area1[:, None] + area2 - inter_area
     
     iou = inter_area / (union_area + 1e-7)
-    
     return iou
+
+
+def box_xywh_to_xyxy(boxes):
+    """Convert boxes from (x, y, w, h) to (x1, y1, x2, y2) format"""
+    x, y, w, h = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    x1 = x - w / 2
+    y1 = y - h / 2
+    x2 = x + w / 2
+    y2 = y + h / 2
+    return torch.stack([x1, y1, x2, y2], dim=1)
 
 
 def compute_ap(recall, precision):
     """
-    Compute Average Precision using 11-point interpolation
+    Compute Average Precision using all-point interpolation (COCO-style)
     
     Args:
-        recall: Array of recall values
-        precision: Array of precision values
+        recall: np.array of recall values
+        precision: np.array of precision values
     
     Returns:
         ap: Average precision
     """
-    # Add sentinel values
+    # Add sentinel values at the beginning and end
     recall = np.concatenate(([0.0], recall, [1.0]))
     precision = np.concatenate(([0.0], precision, [0.0]))
     
-    # Compute precision envelope
+    # Compute precision envelope (maximum precision for all recalls >= r)
     for i in range(precision.size - 1, 0, -1):
         precision[i - 1] = np.maximum(precision[i - 1], precision[i])
     
-    # Calculate area under curve
+    # Calculate area under PR curve
     indices = np.where(recall[1:] != recall[:-1])[0]
     ap = np.sum((recall[indices + 1] - recall[indices]) * precision[indices + 1])
     
     return ap
 
 
-def compute_metrics(predictions, targets, iou_thresholds=None, num_classes=3):
+def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None):
     """
-    Compute evaluation metrics
+    Compute COCO-style metrics from detections and ground truth
     
     Args:
-        predictions: List of predictions for each image
-        targets: List of (bboxes, labels) for each image
-        iou_thresholds: List of IoU thresholds (default: 0.5:0.95:0.05)
+        detections: List of detection dicts per image, each with:
+            - 'boxes': [N, 4] in (x, y, w, h) format
+            - 'scores': [N] confidence scores
+            - 'classes': [N] class indices
+        targets: List of target tuples per image (boxes, labels):
+            - boxes: [M, 4] in (x, y, w, h) format
+            - labels: [M] class indices
         num_classes: Number of classes
+        iou_thresholds: List of IoU thresholds (default: 0.5 to 0.95 step 0.05)
     
     Returns:
-        dict: Dictionary containing metrics
+        dict: Metrics including precision, recall, mAP@50, mAP@50:95
     """
     if iou_thresholds is None:
         iou_thresholds = np.linspace(0.5, 0.95, 10)
     
-    # Initialize metrics storage
-    stats = []
+    # Collect all detections and ground truths by class
+    all_detections = defaultdict(list)  # class_id -> list of (img_id, score, box)
+    all_ground_truths = defaultdict(list)  # class_id -> list of (img_id, box)
     
-    # Process each image
-    for pred, (target_boxes, target_labels) in zip(predictions, targets):
-        if len(pred) == 0:
-            continue
+    for img_id, (det, (gt_boxes, gt_labels)) in enumerate(zip(detections, targets)):
+        # Process detections
+        if len(det['boxes']) > 0:
+            det_boxes_xyxy = box_xywh_to_xyxy(det['boxes'])
+            for box, score, cls in zip(det_boxes_xyxy, det['scores'], det['classes']):
+                all_detections[cls.item()].append({
+                    'img_id': img_id,
+                    'score': score.item(),
+                    'box': box.cpu().numpy()
+                })
         
-        # Extract predictions (simplified - actual implementation would decode YOLO outputs)
-        # pred_boxes, pred_scores, pred_labels = decode_predictions(pred)
+        # Process ground truths
+        if len(gt_boxes) > 0:
+            gt_boxes_xyxy = box_xywh_to_xyxy(gt_boxes)
+            for box, cls in zip(gt_boxes_xyxy, gt_labels):
+                all_ground_truths[cls.item()].append({
+                    'img_id': img_id,
+                    'box': box.cpu().numpy() if torch.is_tensor(box) else box
+                })
+    
+    # Compute AP for each class and IoU threshold
+    aps = {}
+    for iou_thresh in iou_thresholds:
+        aps[iou_thresh] = []
         
-        # For demo, create dummy predictions
-        pred_boxes = torch.rand(10, 4)  # Dummy predictions
-        pred_scores = torch.rand(10)
-        pred_labels = torch.randint(0, num_classes, (10,))
-        
-        # Match predictions to ground truth
-        for iou_thresh in iou_thresholds:
-            for cls in range(num_classes):
-                # Filter by class
-                pred_mask = pred_labels == cls
-                target_mask = target_labels == cls
+        for cls in range(num_classes):
+            if cls not in all_detections or cls not in all_ground_truths:
+                continue
+            
+            # Sort detections by confidence
+            dets = sorted(all_detections[cls], key=lambda x: x['score'], reverse=True)
+            gts = all_ground_truths[cls]
+            
+            # Track which ground truths have been matched
+            matched = defaultdict(set)  # img_id -> set of matched gt indices
+            
+            tp = np.zeros(len(dets))
+            fp = np.zeros(len(dets))
+            
+            for det_idx, det in enumerate(dets):
+                img_id = det['img_id']
+                det_box = torch.tensor(det['box']).unsqueeze(0)
                 
-                if not pred_mask.any():
+                # Get ground truths for this image and class
+                img_gts = [gt for gt in gts if gt['img_id'] == img_id]
+                
+                if len(img_gts) == 0:
+                    fp[det_idx] = 1
                     continue
                 
-                cls_pred_boxes = pred_boxes[pred_mask]
-                cls_pred_scores = pred_scores[pred_mask]
-                cls_target_boxes = target_boxes[target_mask]
+                # Compute IoU with all ground truths
+                gt_boxes = torch.tensor([gt['box'] for gt in img_gts])
+                ious = box_iou_xyxy(det_box, gt_boxes).squeeze(0)
                 
-                if len(cls_target_boxes) == 0:
-                    # False positives
-                    stats.append({
-                        'iou_thresh': iou_thresh,
-                        'class': cls,
-                        'tp': 0,
-                        'fp': len(cls_pred_boxes),
-                        'fn': 0,
-                        'score': cls_pred_scores.max().item() if len(cls_pred_scores) > 0 else 0
-                    })
+                # Find best matching ground truth
+                max_iou, max_idx = ious.max(dim=0)
+                
+                if max_iou >= iou_thresh and max_idx.item() not in matched[img_id]:
+                    tp[det_idx] = 1
+                    matched[img_id].add(max_idx.item())
                 else:
-                    # Calculate IoU
-                    ious = box_iou(cls_pred_boxes, cls_target_boxes)
-                    max_ious, max_indices = ious.max(dim=1)
-                    
-                    # True positives and false positives
-                    tp = (max_ious >= iou_thresh).sum().item()
-                    fp = (max_ious < iou_thresh).sum().item()
-                    fn = len(cls_target_boxes) - tp
-                    
-                    stats.append({
-                        'iou_thresh': iou_thresh,
-                        'class': cls,
-                        'tp': tp,
-                        'fp': fp,
-                        'fn': fn,
-                        'score': cls_pred_scores.max().item() if len(cls_pred_scores) > 0 else 0
-                    })
+                    fp[det_idx] = 1
+            
+            # Compute precision and recall
+            tp_cumsum = np.cumsum(tp)
+            fp_cumsum = np.cumsum(fp)
+            
+            recalls = tp_cumsum / len(gts) if len(gts) > 0 else np.zeros_like(tp_cumsum)
+            precisions = tp_cumsum / (tp_cumsum + fp_cumsum + 1e-7)
+            
+            # Compute AP
+            ap = compute_ap(recalls, precisions)
+            aps[iou_thresh].append(ap)
     
-    # Calculate metrics
-    if not stats:
-        return {
-            'precision': 0.0,
-            'recall': 0.0,
-            'map50': 0.0,
-            'map': 0.0,
-            'map75': 0.0
-        }
+    # Calculate summary metrics
+    map_50 = np.mean(aps[0.5]) if 0.5 in aps and len(aps[0.5]) > 0 else 0.0
+    map_75 = np.mean(aps[0.75]) if 0.75 in aps and len(aps[0.75]) > 0 else 0.0
+    map_50_95 = np.mean([np.mean(v) for v in aps.values() if len(v) > 0]) if aps else 0.0
     
-    # Aggregate stats
-    total_tp = sum(s['tp'] for s in stats)
-    total_fp = sum(s['fp'] for s in stats)
-    total_fn = sum(s['fn'] for s in stats)
+    # Calculate overall precision and recall
+    total_tp = sum(len([d for d in all_detections[cls] if d]) for cls in all_detections)
+    total_gt = sum(len(all_ground_truths[cls]) for cls in all_ground_truths)
+    total_det = sum(len(all_detections[cls]) for cls in all_detections)
     
-    # Calculate precision and recall
-    precision = total_tp / (total_tp + total_fp + 1e-7)
-    recall = total_tp / (total_tp + total_fn + 1e-7)
-    
-    # Calculate mAP at different thresholds
-    map50 = precision  # Simplified - actual implementation would compute proper mAP
-    map75 = precision * 0.9  # Simplified
-    map_50_95 = precision * 0.85  # Simplified
+    precision = total_tp / total_det if total_det > 0 else 0.0
+    recall = total_tp / total_gt if total_gt > 0 else 0.0
     
     return {
         'precision': precision,
         'recall': recall,
-        'map50': map50,
+        'map50': map_50,
+        'map75': map_75,
         'map': map_50_95,
-        'map75': map75
     }
 
 
-def measure_fps(model, input_size=(640, 640), num_iterations=100, device='cuda'):
+def compute_metrics(predictions, targets):
     """
-    Measure inference FPS for real-time deployment feasibility
+    Wrapper for backward compatibility with training script
     
     Args:
-        model: PyTorch model
-        input_size: Input image size (H, W)
-        num_iterations: Number of iterations for averaging
-        device: Device to run inference on
+        predictions: Raw model predictions (will be ignored for now)
+        targets: List of (boxes, labels) tuples
     
     Returns:
-        float: Frames per second
+        dict: Metrics (returns zeros since we need NMS-processed detections)
     """
-    model.eval()
-    model = model.to(device)
-    
-    # Create dummy input
-    dummy_input = torch.randn(1, 3, *input_size).to(device)
-    
-    # Warmup
-    with torch.no_grad():
-        for _ in range(10):
-            _ = model(dummy_input)
-    
-    # Measure
-    torch.cuda.synchronize() if device == 'cuda' else None
-    start_time = time.time()
-    
-    with torch.no_grad():
-        for _ in range(num_iterations):
-            _ = model(dummy_input)
-            if device == 'cuda':
-                torch.cuda.synchronize()
-    
-    end_time = time.time()
-    
-    fps = num_iterations / (end_time - start_time)
-    
-    return fps
-
-
-class MetricsCalculator:
-    """
-    Comprehensive metrics calculator for YOLO-UDD v2.0
-    """
-    
-    def __init__(self, num_classes=3, iou_thresholds=None):
-        self.num_classes = num_classes
-        self.iou_thresholds = iou_thresholds or np.linspace(0.5, 0.95, 10)
-        self.reset()
-    
-    def reset(self):
-        """Reset accumulated statistics"""
-        self.predictions = []
-        self.targets = []
-    
-    def update(self, preds, targets):
-        """Add batch of predictions and targets"""
-        self.predictions.extend(preds)
-        self.targets.extend(targets)
-    
-    def compute(self):
-        """Compute all metrics"""
-        return compute_metrics(
-            self.predictions,
-            self.targets,
-            self.iou_thresholds,
-            self.num_classes
-        )
-    
-    def __str__(self):
-        """String representation of metrics"""
-        metrics = self.compute()
-        s = "Evaluation Metrics:\n"
-        s += f"  Precision: {metrics['precision']:.4f}\n"
-        s += f"  Recall: {metrics['recall']:.4f}\n"
-        s += f"  mAP@50: {metrics['map50']:.4f}\n"
-        s += f"  mAP@50:95: {metrics['map']:.4f}\n"
-        s += f"  mAP@75: {metrics['map75']:.4f}\n"
-        return s
+    # This is called during validation with raw predictions
+    # Return placeholder values until we integrate NMS
+    return {
+        'precision': 0.0,
+        'recall': 0.0,
+        'map50': 0.0,
+        'map75': 0.0,
+        'map': 0.0,
+    }
 
 
 if __name__ == '__main__':
-    # Test metrics calculation
-    print("Testing metrics calculation...")
+    print("Testing COCO-style metrics...")
     
-    # Dummy data
-    predictions = [torch.rand(5, 85) for _ in range(10)]  # 10 images, 5 predictions each
-    targets = [(torch.rand(3, 4), torch.randint(0, 3, (3,))) for _ in range(10)]
+    # Create dummy detections (after NMS)
+    detections = [
+        {
+            'boxes': torch.tensor([[0.5, 0.5, 0.2, 0.3], [0.3, 0.3, 0.1, 0.1]]),
+            'scores': torch.tensor([0.9, 0.7]),
+            'classes': torch.tensor([0, 1])
+        },
+        {
+            'boxes': torch.tensor([[0.4, 0.6, 0.15, 0.25]]),
+            'scores': torch.tensor([0.85]),
+            'classes': torch.tensor([2])
+        }
+    ]
     
-    metrics = compute_metrics(predictions, targets)
+    # Create dummy ground truths
+    targets = [
+        (torch.tensor([[0.5, 0.5, 0.2, 0.3], [0.3, 0.3, 0.1, 0.1]]), 
+         torch.tensor([0, 1])),
+        (torch.tensor([[0.4, 0.6, 0.15, 0.25]]), 
+         torch.tensor([2]))
+    ]
     
-    print("\nMetrics:")
-    print(f"Precision: {metrics['precision']:.4f}")
-    print(f"Recall: {metrics['recall']:.4f}")
-    print(f"mAP@50: {metrics['map50']:.4f}")
-    print(f"mAP@50:95: {metrics['map']:.4f}")
+    # Compute metrics
+    metrics = compute_metrics_coco(detections, targets, num_classes=3)
+    
+    print("✓ Metrics computation successful!")
+    print(f"  Precision: {metrics['precision']:.4f}")
+    print(f"  Recall: {metrics['recall']:.4f}")
+    print(f"  mAP@50: {metrics['map50']:.4f}")
+    print(f"  mAP@50:95: {metrics['map']:.4f}")
+    print(f"  mAP@75: {metrics['map75']:.4f}")
