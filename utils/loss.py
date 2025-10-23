@@ -153,8 +153,21 @@ class YOLOUDDLoss(nn.Module):
                 total_pos_samples += pos_mask_flat.sum().item()
             
             # 2. Objectness Loss (all samples)
-            obj_pred_sigmoid = torch.sigmoid(obj_pred)
-            obj_loss = self.obj_loss_fn(obj_pred_sigmoid, obj_target)
+            # Clamp raw predictions before sigmoid to prevent NaN/Inf
+            obj_pred_clamped = torch.clamp(obj_pred, min=-50, max=50)
+            obj_pred_sigmoid = torch.sigmoid(obj_pred_clamped)
+            
+            # Ensure strict [0, 1] range for both inputs
+            obj_pred_sigmoid = torch.clamp(obj_pred_sigmoid, min=1e-7, max=1.0-1e-7)
+            obj_target_safe = torch.clamp(obj_target, min=0.0, max=1.0)
+            
+            # Handle NaN/Inf values
+            if torch.isnan(obj_pred_sigmoid).any() or torch.isinf(obj_pred_sigmoid).any():
+                obj_pred_sigmoid = torch.nan_to_num(obj_pred_sigmoid, nan=0.5, posinf=1.0-1e-7, neginf=1e-7)
+            if torch.isnan(obj_target_safe).any() or torch.isinf(obj_target_safe).any():
+                obj_target_safe = torch.nan_to_num(obj_target_safe, nan=0.0)
+            
+            obj_loss = self.obj_loss_fn(obj_pred_sigmoid, obj_target_safe)
             
             # Weight positive and negative samples
             pos_weight = 2.0
