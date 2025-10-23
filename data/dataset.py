@@ -142,30 +142,87 @@ class TrashCanDataset(Dataset):
                 'image_id': int
             }
         """
-        # Placeholder implementation
-        # Actual implementation would load image and annotations
-        
-        # For demo purposes, create dummy data
-        image = np.random.randint(0, 255, (self.img_size, self.img_size, 3), dtype=np.uint8)
-        bboxes = np.array([[0.5, 0.5, 0.2, 0.2]])  # Dummy bbox in YOLO format
-        class_labels = np.array([0])
+        # Get image info from COCO format
+        if isinstance(self.annotations, dict) and 'images' in self.annotations:
+            img_info = self.annotations['images'][idx]
+            image_id = img_info['id']
+            img_filename = img_info['file_name']
+            
+            # Load image
+            img_path = os.path.join(self.data_dir, self.split, img_filename)
+            image = cv2.imread(img_path)
+            if image is None:
+                # Fallback: try without split folder
+                img_path = os.path.join(self.data_dir, img_filename)
+                image = cv2.imread(img_path)
+            
+            if image is None:
+                print(f"Warning: Could not load image {img_path}, using blank image")
+                image = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
+            else:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # Get annotations for this image
+            img_anns = [ann for ann in self.annotations['annotations'] if ann['image_id'] == image_id]
+            
+            # Extract bboxes and labels
+            bboxes = []
+            class_labels = []
+            
+            for ann in img_anns:
+                # COCO format: [x, y, width, height] in absolute coordinates
+                x, y, w, h = ann['bbox']
+                img_h, img_w = image.shape[:2]
+                
+                # Convert to YOLO format: [x_center, y_center, width, height] normalized
+                x_center = (x + w / 2) / img_w
+                y_center = (y + h / 2) / img_h
+                norm_w = w / img_w
+                norm_h = h / img_h
+                
+                bboxes.append([x_center, y_center, norm_w, norm_h])
+                
+                # Map category_id to class label
+                category_id = ann['category_id']
+                # Assuming categories are 1-indexed in COCO, convert to 0-indexed
+                class_labels.append(category_id - 1 if category_id > 0 else 0)
+            
+            # Convert to numpy arrays
+            bboxes = np.array(bboxes, dtype=np.float32) if bboxes else np.zeros((0, 4), dtype=np.float32)
+            class_labels = np.array(class_labels, dtype=np.int64) if class_labels else np.zeros((0,), dtype=np.int64)
+        else:
+            # Fallback: use dummy data if annotations not in expected format
+            image = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
+            bboxes = np.zeros((0, 4), dtype=np.float32)
+            class_labels = np.zeros((0,), dtype=np.int64)
+            image_id = idx
         
         # Apply transforms
-        if self.transform:
+        if self.transform and len(bboxes) > 0:
             transformed = self.transform(
                 image=image,
                 bboxes=bboxes,
                 class_labels=class_labels
             )
             image = transformed['image']
-            bboxes = torch.tensor(transformed['bboxes'], dtype=torch.float32)
-            class_labels = torch.tensor(transformed['class_labels'], dtype=torch.long)
+            bboxes = torch.tensor(transformed['bboxes'], dtype=torch.float32) if transformed['bboxes'] else torch.zeros((0, 4), dtype=torch.float32)
+            class_labels = torch.tensor(transformed['class_labels'], dtype=torch.long) if transformed['class_labels'] else torch.zeros((0,), dtype=torch.long)
+        elif self.transform:
+            # No bboxes, just transform image
+            transformed = self.transform(image=image, bboxes=[], class_labels=[])
+            image = transformed['image']
+            bboxes = torch.zeros((0, 4), dtype=torch.float32)
+            class_labels = torch.zeros((0,), dtype=torch.long)
+        else:
+            image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
+            bboxes = torch.tensor(bboxes, dtype=torch.float32)
+            class_labels = torch.tensor(class_labels, dtype=torch.long)
         
         return {
             'image': image,
             'bboxes': bboxes,
             'labels': class_labels,
-            'image_id': idx
+            'image_id': image_id
         }
 
 
