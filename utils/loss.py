@@ -189,12 +189,11 @@ class YOLOUDDLoss(nn.Module):
                 bbox_loss = torch.tensor(1.0, device=bbox_pred.device)
                 total_bbox_loss += bbox_loss
             
-            # Objectness loss
-            # Clamp predictions to [0, 1] range to avoid BCE errors
-            obj_pred_clamped = torch.clamp(obj_pred, min=0.0, max=1.0)
+            # Objectness loss - FIXED: Apply sigmoid to ensure values are in [0, 1]
+            obj_pred_sigmoid = torch.sigmoid(obj_pred)
             # Dummy targets
-            obj_targets = torch.rand_like(obj_pred_clamped)
-            obj_loss = self.obj_loss_fn(obj_pred_clamped, obj_targets)
+            obj_targets = torch.rand_like(obj_pred_sigmoid)
+            obj_loss = self.obj_loss_fn(obj_pred_sigmoid, obj_targets)
             total_obj_loss += obj_loss
             
             # Classification loss
@@ -224,44 +223,3 @@ class YOLOUDDLoss(nn.Module):
             'obj_loss': obj_loss.item() if torch.is_tensor(obj_loss) else obj_loss,
             'cls_loss': cls_loss.item() if torch.is_tensor(cls_loss) else cls_loss,
         }
-
-
-if __name__ == '__main__':
-    # Test loss functions
-    print("Testing YOLO-UDD Loss Functions...")
-    
-    # Test EIoU Loss
-    print("\n1. Testing EIoU Loss")
-    eiou_loss = EIoULoss()
-    pred_boxes = torch.tensor([[0.5, 0.5, 0.2, 0.2], [0.3, 0.3, 0.1, 0.1]])
-    target_boxes = torch.tensor([[0.5, 0.5, 0.2, 0.2], [0.35, 0.35, 0.1, 0.1]])
-    loss = eiou_loss(pred_boxes, target_boxes)
-    print(f"EIoU Loss: {loss.item():.4f}")
-    
-    # Test Varifocal Loss
-    print("\n2. Testing Varifocal Loss")
-    vf_loss = VarifocalLoss()
-    pred = torch.randn(10, 3)
-    target = torch.randint(0, 3, (10,))
-    quality = torch.rand(10)
-    loss = vf_loss(pred, target, quality)
-    print(f"Varifocal Loss: {loss.item():.4f}")
-    
-    # Test Composite Loss
-    print("\n3. Testing Composite YOLO-UDD Loss")
-    composite_loss = YOLOUDDLoss(num_classes=3)
-    
-    # Dummy predictions
-    predictions = [
-        (torch.rand(2, 4, 80, 80), torch.rand(2, 1, 80, 80), torch.rand(2, 3, 80, 80)),
-        (torch.rand(2, 4, 40, 40), torch.rand(2, 1, 40, 40), torch.rand(2, 3, 40, 40)),
-        (torch.rand(2, 4, 20, 20), torch.rand(2, 1, 20, 20), torch.rand(2, 3, 20, 20)),
-    ]
-    target_boxes = [torch.rand(3, 4), torch.rand(2, 4)]
-    target_labels = [torch.randint(0, 3, (3,)), torch.randint(0, 3, (2,))]
-    
-    loss_dict = composite_loss(predictions, target_boxes, target_labels)
-    print(f"Total Loss: {loss_dict['total_loss']:.4f}")
-    print(f"BBox Loss: {loss_dict['bbox_loss']:.4f}")
-    print(f"Obj Loss: {loss_dict['obj_loss']:.4f}")
-    print(f"Cls Loss: {loss_dict['cls_loss']:.4f}")

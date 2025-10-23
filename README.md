@@ -3,6 +3,9 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](DEV_STATUS.md)
+
+> **🚧 Development Status:** This project is in active development. The architecture is complete and tested, but the training pipeline uses placeholder loss functions. See [DEV_STATUS.md](DEV_STATUS.md) for details.
 
 ## 📋 Project Overview
 
@@ -10,7 +13,7 @@ YOLO-UDD v2.0 is an advanced deep learning-based object detection model specific
 
 ### Key Innovations
 
-1. **Turbidity-Adaptive Fusion Module (TAFM)** - Novel contribution that dynamically adjusts feature fusion based on real-time water turbidity conditions
+1. **Turbidity-Adaptive Fusion Module (TAFM)** - ⭐ **Novel contribution** that dynamically adjusts feature fusion based on real-time water turbidity conditions
 2. **Partial Semantic Encoding Module (PSEM)** - Enhanced multi-scale feature fusion for detecting objects of varying sizes
 3. **Split Dimension Weighting Head (SDWH)** - Attention-based detection head that suppresses background noise
 
@@ -22,29 +25,25 @@ Input (640×640) → Backbone (YOLOv9c) → Neck (PSEM + TAFM) → Head (SDWH) �
 
 ## 🎯 Target Performance
 
-- **Baseline (YOLOv9c)**: 75.9% mAP@50:95
-- **Target (YOLO-UDD v2.0)**: >82% mAP@50:95
-- **Expected Improvement**: +6-7%
+| Model | mAP@50:95 | Improvement | Innovation |
+|-------|-----------|-------------|------------|
+| YOLOv9c (Baseline) | 75.9% | - | Baseline |
+| +PSEM/SDWH | ~78.7% | +2.8% | From Li et al. |
+| +TAFM (YOLO-UDD v2.0) | **>82%** | **+6-7%** | **Novel turbidity adaptation** |
 
 ## 🚀 Quick Start
 
-### Option 1: Google Colab (Recommended - Free GPU!) ⚡
+### Prerequisites
 
-**Fastest way to get started with GPU acceleration:**
+- Python 3.8+
+- PyTorch 2.0+
+- CUDA (optional, for GPU training)
 
-1. Open in Colab: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kshitijkhede/YOLO-UDD-v2.0/blob/main/YOLO_UDD_Colab.ipynb)
-2. Enable GPU: Runtime → Change runtime type → GPU (T4)
-3. Run all cells! (Runtime → Run all)
-
-**Training time:** ~2-3 minutes for 10 epochs with GPU (vs ~20-25 minutes on CPU)
-
-📖 See [COLAB_GUIDE.md](COLAB_GUIDE.md) for detailed instructions.
-
-### Option 2: Local Installation
+### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/kshitijkhede/YOLO-UDD-v2.0.git
+git clone https://github.com/YOUR_USERNAME/YOLO-UDD-v2.0.git
 cd YOLO-UDD-v2.0
 
 # Create virtual environment
@@ -55,51 +54,51 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Dataset Preparation
+### Dataset Setup
 
-Download the TrashCan 1.0 dataset:
+1. Download the TrashCan 1.0 dataset from [University of Minnesota](https://conservancy.umn.edu/handle/11299/214865)
 
+2. Create symbolic links (or copy data):
 ```bash
-# Create data directory
 mkdir -p data/trashcan
-
-# Download and extract TrashCan 1.0 dataset
-# Follow instructions at: https://conservancy.umn.edu/handle/11299/214865
+ln -s /path/to/trashcan/dataset/instance_version data/trashcan/
 ```
 
-### Training
+### Test the Architecture
 
 ```bash
-# Train with default configuration
-python scripts/train.py --config configs/train_config.yaml
+# Test model forward pass
+python -c "
+import torch
+from models.yolo_udd import build_yolo_udd
 
-# Train with custom parameters
+print('Building YOLO-UDD model...')
+model = build_yolo_udd(num_classes=3)
+model.eval()
+
+print('Testing forward pass...')
+x = torch.randn(1, 3, 640, 640)
+with torch.no_grad():
+    predictions, turb_score = model(x)
+
+print(f'✓ Forward pass successful!')
+print(f'Turbidity Score: {turb_score.item():.4f}')
+print(f'Detection scales: {len(predictions)}')
+"
+```
+
+### Training (Development Mode)
+
+> **Note:** Current training uses placeholder loss functions. The pipeline works but the model won't learn effectively until proper target assignment is implemented. See [DEV_STATUS.md](DEV_STATUS.md).
+
+```bash
+# Run training test
 python scripts/train.py \
+    --config configs/train_config.yaml \
     --data-dir data/trashcan \
-    --batch-size 16 \
-    --epochs 300 \
-    --lr 0.01 \
+    --batch-size 4 \
+    --epochs 10 \
     --save-dir runs/train
-```
-
-### Evaluation
-
-```bash
-# Evaluate trained model
-python scripts/evaluate.py \
-    --weights runs/train/checkpoints/best.pt \
-    --data-dir data/trashcan \
-    --save-dir runs/eval
-```
-
-### Inference
-
-```bash
-# Run inference on images
-python scripts/detect.py \
-    --weights runs/train/checkpoints/best.pt \
-    --source path/to/images \
-    --save-dir runs/detect
 ```
 
 ## 📊 Project Structure
@@ -107,27 +106,26 @@ python scripts/detect.py \
 ```
 YOLO-UDD-v2.0/
 ├── models/
-│   ├── __init__.py
-│   ├── yolo_udd.py         # Main YOLO-UDD architecture
-│   ├── tafm.py             # Turbidity-Adaptive Fusion Module
-│   ├── psem.py             # Partial Semantic Encoding Module
-│   └── sdwh.py             # Split Dimension Weighting Head
+│   ├── yolo_udd.py         # Main YOLO-UDD architecture ✓
+│   ├── tafm.py             # Turbidity-Adaptive Fusion Module ✓
+│   ├── psem.py             # Partial Semantic Encoding Module ✓
+│   └── sdwh.py             # Split Dimension Weighting Head ✓
 ├── data/
-│   ├── dataset.py          # TrashCan dataset loader
-│   └── augmentations.py    # Underwater-specific augmentations
+│   ├── dataset.py          # TrashCan dataset loader ✓
+│   └── augmentations.py    # Underwater-specific augmentations ✓
 ├── utils/
-│   ├── loss.py             # Loss functions (EIoU, Varifocal, BCE)
-│   ├── metrics.py          # Evaluation metrics
-│   └── visualization.py    # Visualization tools
+│   ├── loss.py             # Loss functions (⚠️ placeholder)
+│   ├── metrics.py          # Evaluation metrics (⚠️ placeholder)
+│   └── visualization.py    # Visualization tools ✓
 ├── scripts/
-│   ├── train.py            # Training script
+│   ├── train.py            # Training script ✓
 │   ├── evaluate.py         # Evaluation script
 │   └── detect.py           # Inference script
 ├── configs/
-│   └── train_config.yaml   # Training configuration
-├── requirements.txt
-├── README.md
-└── LICENSE
+│   └── train_config.yaml   # Training configuration ✓
+├── requirements.txt        # Dependencies ✓
+├── DEV_STATUS.md          # Development status & roadmap
+└── README.md              # This file
 ```
 
 ## 🔬 Model Architecture Details
@@ -136,7 +134,7 @@ YOLO-UDD-v2.0/
 
 - **Feature Extractor**: GELAN (Generalized Efficient Layer Aggregation Network)
 - **Multi-scale Features**: P3, P4, P5 (80×80, 40×40, 20×20)
-- **Pretrained**: COCO dataset
+- **Pretrained**: COCO dataset (optional)
 
 ### 2. Neck: PSEM-enhanced PANet + TAFM
 
@@ -173,14 +171,6 @@ Based on Section 5.2 of the project plan:
 4. **Noise Injection** - Simulates sensor noise
 5. **RGB Shift** - Additional underwater color effects
 
-## 📊 Evaluation Metrics
-
-- **Precision**: True positives / (True positives + False positives)
-- **Recall**: True positives / (True positives + False negatives)
-- **mAP@50**: Mean Average Precision at IoU=0.50
-- **mAP@50:95**: Mean Average Precision at IoU=0.50:0.95
-- **FPS**: Frames per second for real-time feasibility
-
 ## 🎓 Dataset Information
 
 **TrashCan 1.0 Dataset**
@@ -190,6 +180,24 @@ Based on Section 5.2 of the project plan:
   - Animal
   - ROV
 - **Split**: 70% train, 15% validation, 15% test
+- **Training Set**: 6,065 images
+- **Validation Set**: 1,147 images
+
+## 🔧 Development Status
+
+### ✅ What's Working
+- Complete model architecture (Backbone, PSEM, TAFM, SDWH)
+- Data loading and augmentation pipeline
+- Training loop infrastructure
+- Model checkpointing and logging
+
+### ⚠️ In Progress
+- Proper target assignment algorithm
+- Real loss calculations with GT matching
+- Evaluation metrics (mAP, Precision, Recall)
+
+### 📅 Roadmap
+See [DEV_STATUS.md](DEV_STATUS.md) for detailed development roadmap and milestones.
 
 ## 📖 Citation
 
@@ -211,7 +219,13 @@ If you use YOLO-UDD v2.0 in your research, please cite:
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Priority areas:
+
+1. **High Priority**: Target assignment algorithm, proper loss implementation
+2. **Medium Priority**: Evaluation metrics, NMS post-processing
+3. **Nice to Have**: Visualization tools, Docker support
+
+Please read [DEV_STATUS.md](DEV_STATUS.md) before contributing.
 
 ## 📄 License
 
@@ -227,9 +241,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 📧 Contact
 
 For questions or collaborations:
-- Email: your.email@example.com
-- GitHub Issues: [Create an issue](https://github.com/yourusername/YOLO-UDD-v2.0/issues)
+- **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/YOLO-UDD-v2.0/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/YOUR_USERNAME/YOLO-UDD-v2.0/discussions)
 
 ---
 
-**Note**: This project is aimed at environmental conservation by enabling automated cleanup of marine ecosystems. Please use this technology responsibly for environmental applications.
+**Note**: This project is aimed at environmental conservation by enabling automated cleanup of marine ecosystems. The architecture is complete and novel (TAFM module), but training requires proper loss implementation for effective learning. See [DEV_STATUS.md](DEV_STATUS.md) for current status.
