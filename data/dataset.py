@@ -46,16 +46,27 @@ class TrashCanDataset(Dataset):
         self.transform = self._get_transforms()
         
     def _load_annotations(self):
-        """Load dataset annotations"""
-        ann_file = os.path.join(self.data_dir, 'annotations', f'{self.split}.json')
+        """Load dataset annotations from TrashCAN COCO format"""
+        # Try TrashCAN format first: instances_train_trashcan.json
+        ann_file = os.path.join(self.data_dir, f'instances_{self.split}_trashcan.json')
         
-        # Placeholder - actual implementation would load from JSON
-        # For now, return empty list
+        # Fallback to standard format
+        if not os.path.exists(ann_file):
+            ann_file = os.path.join(self.data_dir, 'annotations', f'{self.split}.json')
+        
         annotations = []
         
         if os.path.exists(ann_file):
+            print(f"Loading annotations from: {ann_file}")
             with open(ann_file, 'r') as f:
-                annotations = json.load(f)
+                data = json.load(f)
+                # COCO format has 'images' and 'annotations' keys
+                if isinstance(data, dict) and 'images' in data:
+                    annotations = data
+                else:
+                    annotations = data
+        else:
+            print(f"Warning: Annotation file not found: {ann_file}")
         
         return annotations
     
@@ -115,6 +126,8 @@ class TrashCanDataset(Dataset):
             ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels']))
     
     def __len__(self):
+        if isinstance(self.annotations, dict) and 'images' in self.annotations:
+            return len(self.annotations['images'])
         return len(self.annotations) if self.annotations else 0
     
     def __getitem__(self, idx):
