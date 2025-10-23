@@ -15,3 +15,6 @@ __all__ = [
     'build_targets',
     'assign_targets_simple'
 ]
+from .nms import nms, batched_nms
+
+__all__ = ['YOLOUDDLoss', 'TrashCanDataset', 'compute_metrics', 'assign_targets_simple', 'build_targets', 'nms', 'batched_nms']
