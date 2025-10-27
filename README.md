@@ -158,7 +158,7 @@ Based on Section 5.2 of the project plan:
 | Initial LR | 0.01 |
 | LR Schedule | Cosine Annealing |
 | Batch Size | 16 |
-| Epochs | 300 |
+| Epochs | 100 |
 | Image Size | 640×640 |
 | Weight Decay | 0.0005 |
 | Early Stopping | 20 epochs |

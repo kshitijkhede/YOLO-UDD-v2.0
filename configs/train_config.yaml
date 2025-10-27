@@ -21,7 +21,7 @@ data:
 
 # Training Hyperparameters (Section 5.2)
 training:
-  epochs: 300
+  epochs: 100
   batch_size: 16
   num_workers: 4
   

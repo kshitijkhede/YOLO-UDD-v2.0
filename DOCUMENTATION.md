@@ -149,7 +149,7 @@ python scripts/train.py \
     --config configs/train_config.yaml \
     --data-dir data/trashcan \
     --batch-size 16 \
-    --epochs 300 \
+    --epochs 100 \
     --lr 0.01 \
     --pretrained weights/yolov9c.pt \
     --save-dir runs/train/exp2
@@ -162,7 +162,7 @@ Key hyperparameters (from Section 5.2):
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | `batch_size` | 16 | Batch size for training |
-| `epochs` | 300 | Maximum training epochs |
+| `epochs` | 100 | Maximum training epochs |
 | `learning_rate` | 0.01 | Initial learning rate |
 | `weight_decay` | 0.0005 | AdamW weight decay |
 | `early_stopping_patience` | 20 | Early stopping patience |
