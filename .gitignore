@@ -63,3 +63,4 @@ events.out.tfevents.*
 # Model checkpoints (optional - uncomment if you want to exclude)
 # weights/*.pt
 # checkpoints/*.pt
+*.zip
