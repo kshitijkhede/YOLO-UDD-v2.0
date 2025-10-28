@@ -43,10 +43,25 @@ data/trashcan/images/train/
 data/trashcan/images/val/
 data/trashcan/images/test/
 data/trashcan/annotations/*.json
+data/trashcan.zip
+*.zip
 
 # Training outputs
 runs/
 *.log
+
+# Temporary/unnecessary files
+*_OLD.*
+*_FIXED.*
+*.ps1
+*.bat
+PROJECT_PLAN.pdf
+CONFIGURATION_NOTES.md
+DATASET_FIX_GUIDE.md
+DATASET_SETUP_INSTRUCTIONS.md
+DATASET_STATUS.md
+PROJECT_STATUS_REPORT.md
+README_DATASET_ISSUE.md
 
 # OS
 .DS_Store
