@@ -31,9 +31,6 @@ class TrashCanDataset(Dataset):
         self.img_size = img_size
         self.augment = augment and (split == 'train')
         
-        # DEBUG: Print the data_dir being used
-        print(f"[DEBUG] TrashCanDataset({split}): data_dir = {os.path.abspath(data_dir)}")
-        
         # Load annotations
         self.annotations = self._load_annotations()
         
@@ -52,17 +49,15 @@ class TrashCanDataset(Dataset):
         """Load dataset annotations from TrashCAN COCO format"""
         # Try TrashCAN format first: instances_train_trashcan.json
         ann_file = os.path.join(self.data_dir, f'instances_{self.split}_trashcan.json')
-        print(f"[DEBUG] Checking TrashCAN format: {ann_file}")
         
         # Fallback to standard format
         if not os.path.exists(ann_file):
             ann_file = os.path.join(self.data_dir, 'annotations', f'{self.split}.json')
-            print(f"[DEBUG] Checking standard format: {ann_file}")
         
         annotations = []
         
         if os.path.exists(ann_file):
-            print(f"✓ Loading annotations from: {ann_file}")
+            print(f"Loading annotations from: {ann_file}")
             with open(ann_file, 'r') as f:
                 data = json.load(f)
                 # COCO format has 'images' and 'annotations' keys
@@ -71,7 +66,7 @@ class TrashCanDataset(Dataset):
                 else:
                     annotations = data
         else:
-            print(f"✗ Warning: Annotation file not found: {ann_file}")
+            print(f"Warning: Annotation file not found: {ann_file}")
         
         return annotations
     
