@@ -1,0 +1,109 @@
+# Training Configuration for YOLO-UDD v2.0
+# Based on specifications in Section 5.2
+
+# Model Configuration
+model:
+  name: "YOLO-UDD-v2.0"
+  num_classes: 22  # Full TrashCan dataset classes
+  pretrained_path: null  # Path to COCO pretrained weights
+  
+# Dataset Configuration
+data:
+  dataset_name: "TrashCan-1.0"
+  data_dir: "data/trashcan"
+  img_size: 640
+  class_names: ["rov", "plant", "animal_fish", "animal_starfish", "animal_shells", "animal_crab", "animal_eel", "animal_etc", "trash_clothing", "trash_pipe", "trash_bottle", "trash_bag", "trash_snack_wrapper", "trash_can", "trash_cup", "trash_container", "trash_unknown_instance", "trash_branch", "trash_wreckage", "trash_tarp", "trash_rope", "trash_net"]
+  
+  # Data split (70% train, 15% val, 15% test)
+  train_split: 0.70
+  val_split: 0.15
+  test_split: 0.15
+
+# Training Hyperparameters (Section 5.2)
+training:
+  epochs: 100
+  batch_size: 16
+  num_workers: 4
+  
+  # Optimizer: AdamW
+  optimizer: "AdamW"
+  learning_rate: 0.01
+  weight_decay: 0.0005
+  
+  # Learning Rate Scheduler: Cosine Annealing
+  scheduler: "CosineAnnealing"
+  lr_min: 0.0001  # Minimum LR (1% of initial)
+  
+  # Early Stopping
+  early_stopping_patience: 20
+  
+  # Gradient Clipping
+  grad_clip_norm: 10.0
+  
+  # Mixed Precision Training
+  use_amp: true
+
+# Loss Configuration
+loss:
+  lambda_box: 5.0  # Weight for bounding box loss
+  lambda_obj: 1.0  # Weight for objectness loss
+  lambda_cls: 1.0  # Weight for classification loss
+
+# Data Augmentation
+augmentation:
+  # Geometric augmentations
+  horizontal_flip: 0.5
+  vertical_flip: 0.2
+  shift_scale_rotate: 0.5
+  random_crop: 0.5
+  
+  # Underwater-specific photometric augmentations
+  color_jitter: 0.7
+  brightness: 0.3
+  contrast: 0.3
+  saturation: 0.3
+  hue: 0.1
+  
+  # Turbidity simulation
+  gaussian_blur: 0.5
+  motion_blur: 0.3
+  
+  # Noise injection
+  gaussian_noise: 0.3
+  iso_noise: 0.2
+  
+  # Color effects
+  rgb_shift: 0.4
+  channel_shuffle: 0.1
+
+# Evaluation Metrics (Section 5.3)
+evaluation:
+  metrics: ["precision", "recall", "mAP@50", "mAP@50:95", "FPS"]
+  iou_thresholds: [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+  conf_threshold: 0.25
+  nms_threshold: 0.45
+
+# Logging and Checkpointing
+logging:
+  save_dir: "runs/train"
+  log_interval: 10  # Log every N batches
+  val_interval: 1   # Validate every N epochs
+  save_interval: 5  # Save checkpoint every N epochs
+  tensorboard: true
+  
+# Target Performance (Section 2)
+targets:
+  baseline_map: 0.759  # YOLOv9c baseline
+  target_map: 0.82     # YOLO-UDD v2.0 target (>82%)
+  expected_improvement: 0.06  # +6% improvement
+
+# Hardware Configuration
+hardware:
+  device: "cuda"  # cuda or cpu
+  gpu_ids: [0]
+  num_gpus: 1
+  distributed: false
+  
+# Reproducibility
+seed: 42
+deterministic: false
