@@ -1,0 +1,85 @@
+# CPU-Optimized Training Configuration for YOLO-UDD v2.0
+# Use this for local CPU training or testing
+
+# Model Configuration
+model:
+  name: "YOLO-UDD-v2.0"
+  num_classes: 3  # Simplified for testing (trash, animal, rov)
+  pretrained_path: null
+  
+# Dataset Configuration
+data:
+  dataset_name: "TrashCan-1.0-Mini"
+  data_dir: "data/trashcan"
+  img_size: 320  # Reduced from 640 for faster CPU training
+  class_names: ["trash", "animal", "rov"]
+  
+  train_split: 0.70
+  val_split: 0.15
+  test_split: 0.15
+
+# Training Hyperparameters - CPU Optimized
+training:
+  epochs: 10  # Reduced for quick testing
+  batch_size: 1  # Critical for CPU/low memory
+  num_workers: 0  # 0 for Windows to avoid multiprocessing issues
+  
+  optimizer: "AdamW"
+  learning_rate: 0.001  # Lower LR for stability
+  weight_decay: 0.0005
+  
+  scheduler: "CosineAnnealing"
+  lr_min: 0.0001
+  
+  early_stopping_patience: 5
+  grad_clip_norm: 10.0
+  use_amp: false  # Disable AMP on CPU
+
+# Loss Configuration
+loss:
+  lambda_box: 5.0
+  lambda_obj: 1.0
+  lambda_cls: 1.0
+
+# Minimal augmentation for faster training
+augmentation:
+  horizontal_flip: 0.5
+  vertical_flip: 0.0
+  shift_scale_rotate: 0.0
+  random_crop: 0.0
+  color_jitter: 0.3
+  brightness: 0.2
+  contrast: 0.2
+  saturation: 0.2
+  hue: 0.1
+  gaussian_blur: 0.0
+  motion_blur: 0.0
+  gaussian_noise: 0.0
+  iso_noise: 0.0
+  rgb_shift: 0.0
+  channel_shuffle: 0.0
+
+# Evaluation Metrics
+evaluation:
+  metrics: ["precision", "recall", "mAP@50", "mAP@50:95"]
+  iou_thresholds: [0.5, 0.75]
+  conf_threshold: 0.25
+  nms_threshold: 0.45
+
+# Logging and Checkpointing
+logging:
+  save_dir: "runs/train_cpu"
+  log_interval: 5
+  val_interval: 1
+  save_interval: 2
+  tensorboard: true
+
+# Hardware Configuration
+hardware:
+  device: "cpu"
+  num_gpus: 0
+  distributed: false
+  
+# Reproducibility
+seed: 42
+deterministic: false
