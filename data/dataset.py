@@ -77,11 +77,12 @@ class TrashCanDataset(Dataset):
         """
         if self.augment:
             return A.Compose([
+                # First resize to target size
+                A.Resize(height=self.img_size, width=self.img_size),
                 # Geometric augmentations
                 A.HorizontalFlip(p=0.5),
                 A.VerticalFlip(p=0.2),
                 A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=15, p=0.5),
-                A.RandomResizedCrop(height=self.img_size, width=self.img_size, size=(self.img_size, self.img_size), scale=(0.8, 1.0), p=0.5),
                 
                 # Underwater-specific photometric augmentations
                 # Simulate color casting at depth
@@ -186,10 +187,33 @@ class TrashCanDataset(Dataset):
                 norm_h = h / img_h
                 
                 # Clip to valid range [0, 1] to handle rounding errors
+                # Ensure coordinates don't exceed image boundaries
                 x_center = np.clip(x_center, 0.0, 1.0)
                 y_center = np.clip(y_center, 0.0, 1.0)
                 norm_w = np.clip(norm_w, 0.0, 1.0)
                 norm_h = np.clip(norm_h, 0.0, 1.0)
+                
+                # Additional check: ensure box doesn't exceed boundaries
+                x_min = x_center - norm_w / 2
+                y_min = y_center - norm_h / 2
+                x_max = x_center + norm_w / 2
+                y_max = y_center + norm_h / 2
+                
+                # Clip box coordinates
+                x_min = np.clip(x_min, 0.0, 1.0)
+                y_min = np.clip(y_min, 0.0, 1.0)
+                x_max = np.clip(x_max, 0.0, 1.0)
+                y_max = np.clip(y_max, 0.0, 1.0)
+                
+                # Recalculate center and size from clipped coordinates
+                norm_w = x_max - x_min
+                norm_h = y_max - y_min
+                x_center = (x_min + x_max) / 2
+                y_center = (y_min + y_max) / 2
+                
+                # Skip boxes that are too small after clipping
+                if norm_w < 0.001 or norm_h < 0.001:
+                    continue
                 
                 bboxes.append([x_center, y_center, norm_w, norm_h])
                 
