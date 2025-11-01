@@ -1,0 +1,151 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                 🚀 KAGGLE QUICK START - YOLO-UDD v2.0                    ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+📋 BEFORE YOU START:
+  1. Create Kaggle account: https://www.kaggle.com/
+  2. Have annotation files ready:
+     - train.json (22 MB)
+     - val.json (5.6 MB)
+     Located at: /home/student/MIR/Project/YOLO-UDD-v2.0/data/trashcan/annotations/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 METHOD 1: Using Kaggle Dataset (RECOMMENDED)
+
+STEP 1: Upload Annotations to Kaggle
+  1.1. Zip annotations:
+       $ cd /home/student/MIR/Project/YOLO-UDD-v2.0/data/trashcan/annotations
+       $ zip annotations.zip train.json val.json
+  
+  1.2. Upload to Kaggle:
+       • Go to: https://www.kaggle.com/datasets
+       • Click "New Dataset"
+       • Upload annotations.zip
+       • Title: "TrashCAN Annotations COCO Format"
+       • Note your dataset path: YOUR_USERNAME/trashcan-annotations-coco-format
+
+STEP 2: Create Notebook
+  2.1. Go to: https://www.kaggle.com/code
+  2.2. Click "New Notebook"
+  2.3. Settings → Accelerator → GPU P100 or T4 ⚡
+  2.4. Settings → Internet → ON 🌐
+
+STEP 3: Add Your Dataset
+  3.1. Click "+ Add Data" (right sidebar)
+  3.2. Search: YOUR_USERNAME/trashcan-annotations-coco-format
+  3.3. Click "Add"
+
+STEP 4: Copy Training Code
+  4.1. Open: KAGGLE_SETUP_GUIDE.md
+  4.2. Copy cells from "Step 5: Run Training Code"
+  4.3. Paste into Kaggle notebook
+  4.4. Update paths in Cell 4 to match your dataset
+
+STEP 5: Run All Cells
+  5.1. Click "Run All" or run cells one by one
+  5.2. Wait for training to complete (~6 hours for 100 epochs)
+  5.3. Download checkpoints from /kaggle/working/checkpoints/
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 METHOD 2: Direct Upload (Simpler but requires re-upload each session)
+
+STEP 1-2: Same as Method 1 (Create notebook, enable GPU)
+
+STEP 3: Upload Files Directly
+  3.1. In first notebook cell, run:
+       from google.colab import files
+       import os
+       os.makedirs('data/trashcan/annotations', exist_ok=True)
+       
+       print("Upload train.json...")
+       uploaded = files.upload()
+       !mv train.json data/trashcan/annotations/
+       
+       print("Upload val.json...")
+       uploaded = files.upload()
+       !mv val.json data/trashcan/annotations/
+  
+  3.2. When prompted, upload train.json then val.json
+
+STEP 4-5: Continue from Method 1, Step 4
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏱️  EXPECTED TIMELINE:
+
+Session 1 (100 epochs, ~6 hours):
+  • Epoch 0-25:  Loss 2.5→1.5, mAP ~25-30%
+  • Epoch 25-50:  Loss 1.5→1.2, mAP ~40-45%
+  • Epoch 50-75:  Loss 1.2→0.9, mAP ~50-55%
+  • Epoch 75-100: Loss 0.9→0.7, mAP ~55-60%
+
+Session 2 (100 epochs, ~6 hours):
+  • mAP: 60% → 65-70%
+
+Session 3 (100 epochs, ~6 hours):
+  • mAP: 70% → 70-75% ✅ PRODUCTION READY!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 QUICK TROUBLESHOOTING:
+
+❌ "CUDA out of memory"
+   → Reduce batch size to 8 or 4 in config
+
+❌ "Annotation files not found"
+   → Check dataset path: !ls -la /kaggle/input/
+   → Adjust paths in Cell 4
+
+❌ "Training slow"
+   → Verify GPU enabled: import torch; print(torch.cuda.is_available())
+   → Should print: True
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 DOWNLOAD RESULTS:
+
+Checkpoints saved at: /kaggle/working/checkpoints/
+  • best.pth - Best model (highest mAP)
+  • last.pth - Most recent model
+  • epoch_*.pth - Checkpoints every 10 epochs
+
+To download:
+  1. Click "Output" tab (top right)
+  2. Navigate to checkpoints/
+  3. Click download icon
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ SUCCESS INDICATORS:
+
+✓ GPU detected (Cell 3 shows CUDA available)
+✓ Annotations loaded (shows image/annotation counts)
+✓ Training starts without errors
+✓ Loss decreases each epoch
+✓ Checkpoints save to /kaggle/working/checkpoints/
+✓ After 100 epochs: mAP@50 > 55%
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 FULL DOCUMENTATION:
+
+• Complete guide: KAGGLE_SETUP_GUIDE.md
+• Training notebook: YOLO_UDD_Kaggle_Training.ipynb
+• Cloud guide: CLOUD_TRAINING_GUIDE.md
+• Quick start: QUICKSTART.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+�� LINKS:
+
+• GitHub: https://github.com/kshitijkhede/YOLO-UDD-v2.0
+• Kaggle: https://www.kaggle.com/
+• Kaggle Datasets: https://www.kaggle.com/datasets
+• Kaggle Notebooks: https://www.kaggle.com/code
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 YOU'RE ALL SET! Follow Method 1 above and you'll be training in minutes!
+
