@@ -77,14 +77,11 @@ class TrashCanDataset(Dataset):
         """
         if self.augment:
             return A.Compose([
-                # Resize first to ensure consistent size
-                A.Resize(height=self.img_size, width=self.img_size),
-                
                 # Geometric augmentations
                 A.HorizontalFlip(p=0.5),
                 A.VerticalFlip(p=0.2),
-                A.Affine(shift_limit=0.1, scale_limit=0.2, rotate_limit=15, p=0.5),
-                A.RandomResizedCrop(size=(self.img_size, self.img_size), scale=(0.8, 1.0), p=0.5),
+                A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=15, p=0.5),
+                A.RandomResizedCrop(height=self.img_size, width=self.img_size, size=(self.img_size, self.img_size), scale=(0.8, 1.0), p=0.5),
                 
                 # Underwater-specific photometric augmentations
                 # Simulate color casting at depth
@@ -108,7 +105,7 @@ class TrashCanDataset(Dataset):
                 
                 # Simulate sensor noise
                 A.OneOf([
-                    A.GaussNoise(p=1.0),
+                    A.GaussNoise(var_limit=(10.0, 50.0), p=1.0),
                     A.ISONoise(p=1.0),
                 ], p=0.3),
                 
@@ -119,14 +116,14 @@ class TrashCanDataset(Dataset):
                 # Normalization and tensor conversion
                 A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ToTensorV2(),
-            ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels'], min_area=1.0, min_visibility=0.1))
+            ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels']))
         else:
             # Validation/test transforms (no augmentation)
             return A.Compose([
                 A.Resize(height=self.img_size, width=self.img_size),
                 A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ToTensorV2(),
-            ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels'], min_area=1.0, min_visibility=0.1))
+            ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels']))
     
     def __len__(self):
         if isinstance(self.annotations, dict) and 'images' in self.annotations:
@@ -182,16 +179,6 @@ class TrashCanDataset(Dataset):
                 x, y, w, h = ann['bbox']
                 img_h, img_w = image.shape[:2]
                 
-                # Clip bbox to image boundaries first
-                x = max(0, min(x, img_w))
-                y = max(0, min(y, img_h))
-                w = max(0, min(w, img_w - x))
-                h = max(0, min(h, img_h - y))
-                
-                # Skip invalid bboxes
-                if w <= 0 or h <= 0:
-                    continue
-                
                 # Convert to YOLO format: [x_center, y_center, width, height] normalized
                 x_center = (x + w / 2) / img_w
                 y_center = (y + h / 2) / img_h
@@ -199,10 +186,10 @@ class TrashCanDataset(Dataset):
                 norm_h = h / img_h
                 
                 # Clip to valid range [0, 1] to handle rounding errors
-                x_center = float(np.clip(x_center, 0.0, 1.0))
-                y_center = float(np.clip(y_center, 0.0, 1.0))
-                norm_w = float(np.clip(norm_w, 0.0, 1.0))
-                norm_h = float(np.clip(norm_h, 0.0, 1.0))
+                x_center = np.clip(x_center, 0.0, 1.0)
+                y_center = np.clip(y_center, 0.0, 1.0)
+                norm_w = np.clip(norm_w, 0.0, 1.0)
+                norm_h = np.clip(norm_h, 0.0, 1.0)
                 
                 bboxes.append([x_center, y_center, norm_w, norm_h])
                 
