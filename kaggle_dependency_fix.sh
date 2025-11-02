@@ -17,14 +17,14 @@ print("🔧 Installing dependencies with fixed versions to avoid conflicts...\n"
 !pip install -q torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cu118
 !pip install -q opencv-python-headless==4.9.0.80 pillow==10.3.0 pycocotools==2.0.7 pyyaml==6.0.1 tqdm==4.66.4 tensorboard==2.16.2
 
-# ⚠️ CRITICAL: Install compatible albucore BEFORE albumentations
-!pip install -q albucore==0.0.17
-!pip install -q albumentations==1.4.8 timm==0.9.16 scikit-learn==1.3.2
+# ⚠️ CRITICAL: Install matching albucore for Kaggle's albumentations 2.0.8
+!pip install -q albucore==0.0.24
+!pip install -q albumentations==2.0.8 timm==0.9.16 scikit-learn==1.3.2
 
 print("\n✅ All dependencies installed successfully with version-locking!")
-print("   - Numpy: 1.26.4 (compatible with all packages)")
+print("   - Numpy: 1.26.4 (compatible with PyTorch)")
 print("   - PyTorch: 2.2.2 (CUDA 11.8)")
-print("   - Albumentations: 1.4.8 + albucore: 0.0.17 (compatible)")
-print("   - scikit-learn: 1.3.2 (compatible)")
-print("   - No dependency conflicts ✓")
+print("   - Albumentations: 2.0.8 + albucore: 0.0.24 (compatible)")
+print("   - scikit-learn: 1.3.2")
+print("   - Dependency conflicts minimized ✓")
 EOF
