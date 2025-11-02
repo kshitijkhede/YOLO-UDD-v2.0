@@ -34,7 +34,7 @@ class Trainer:
     - Transfer learning from COCO pretrained weights
     """
     
-    def __init__(self, config):
+    def __init__(self, config, resume_from=None):
         self.config = config
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -75,6 +75,10 @@ class Trainer:
         self.current_epoch = 0
         self.best_map = 0.0
         self.early_stop_counter = 0
+        
+        # Resume from checkpoint if provided
+        if resume_from:
+            self.load_checkpoint(resume_from)
         
         # Tensorboard writer
         self.writer = SummaryWriter(log_dir=self.log_dir)
@@ -194,6 +198,20 @@ class Trainer:
             torch.save(checkpoint, best_path)
             print(f"Saved best checkpoint with mAP: {self.best_map:.4f}")
     
+    def load_checkpoint(self, checkpoint_path):
+        """Load checkpoint to resume training"""
+        print(f"\n🔄 Resuming from checkpoint: {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        self.current_epoch = checkpoint['epoch'] + 1  # Start from next epoch
+        self.best_map = checkpoint['best_map']
+        
+        print(f"✅ Resumed from epoch {checkpoint['epoch']}")
+        print(f"   Best mAP so far: {self.best_map:.4f}\n")
+    
     def train(self):
         """Main training loop"""
         print("=" * 80)
@@ -273,6 +291,8 @@ def parse_args():
     parser.add_argument('--pretrained', type=str, help='Path to pretrained weights')
     parser.add_argument('--save-dir', type=str, default='runs/train',
                         help='Directory to save results')
+    parser.add_argument('--resume', type=str, default=None,
+                        help='Path to checkpoint to resume from')
     
     return parser.parse_args()
 
@@ -334,7 +354,7 @@ def main():
         config['save_dir'] = args.save_dir
     
     # Create trainer and start training
-    trainer = Trainer(config)
+    trainer = Trainer(config, resume_from=args.resume)
     trainer.train()
 
 
