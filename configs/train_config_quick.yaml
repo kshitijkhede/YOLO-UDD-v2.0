@@ -1,0 +1,135 @@
+# ULTRA FAST Training Configuration - Quick Test Results in 2-3 Hours!
+# Uses subset of data for rapid experimentation and validation
+
+# Model Configuration
+model:
+  name: "YOLO-UDD-v2.0"
+  num_classes: 22
+  pretrained_path: null
+  
+# Dataset Configuration - SUBSET MODE
+data:
+  dataset_name: "TrashCAN-1.0-Subset"
+  data_dir: "data/trashcan"
+  img_size: 512              # Reduced from 640 for speed (20% faster)
+  class_names: ["rov", "plant", "animal_fish", "animal_starfish", "animal_shells", "animal_crab", "animal_eel", "animal_etc", "trash_clothing", "trash_pipe", "trash_bottle", "trash_bag", "trash_snack_wrapper", "trash_can", "trash_cup", "trash_container", "trash_unknown_instance", "trash_branch", "trash_wreckage", "trash_tarp", "trash_rope", "trash_net"]
+  
+  # SUBSET CONFIGURATION - Use only 20% of data
+  use_subset: true
+  subset_ratio: 0.2          # Use 20% of training data (~1200 images instead of 6065)
+  subset_seed: 42            # Reproducible subset selection
+
+# ULTRA FAST Training Hyperparameters
+training:
+  epochs: 20                 # Very reduced for quick test (was 50)
+  batch_size: 32             # Larger batch for speed (if GPU allows, else use 24)
+  num_workers: 8             # Fast data loading
+  
+  # Optimizer: AdamW
+  optimizer: "AdamW"
+  learning_rate: 0.01
+  weight_decay: 0.0005
+  
+  # Learning Rate Scheduler
+  scheduler: "CosineAnnealing"
+  lr_min: 0.0001
+  warmup_epochs: 2           # Quick warmup
+  
+  # Early Stopping (stop early if converged)
+  early_stopping_patience: 8  # Stop after 8 epochs of no improvement
+  
+  # Gradient Clipping
+  grad_clip_norm: 10.0
+  
+  # Mixed Precision (CRITICAL for speed)
+  use_amp: true
+
+# Loss Configuration
+loss:
+  lambda_box: 5.0
+  lambda_obj: 1.0
+  lambda_cls: 1.0
+
+# MINIMAL Data Augmentation (for speed)
+augmentation:
+  use_augmentation: true
+  horizontal_flip: 0.5       # Keep basic flips
+  vertical_flip: 0.0
+  shift_scale_rotate: 0.0    # Disabled
+  random_crop: 0.0           # Disabled
+  
+  # Minimal photometric
+  color_jitter: 0.3
+  brightness: 0.1
+  contrast: 0.1
+  saturation: 0.0
+  hue: 0.0
+  
+  # No blur/noise for speed
+  gaussian_blur: 0.0
+  motion_blur: 0.0
+  gaussian_noise: 0.0
+  iso_noise: 0.0
+  rgb_shift: 0.0
+  channel_shuffle: 0.0
+
+# Evaluation
+evaluation:
+  metrics: ["precision", "recall", "mAP@50", "mAP@50:95"]
+  iou_thresholds: [0.5, 0.75, 0.9]  # Fewer thresholds for speed
+  conf_threshold: 0.25
+  nms_threshold: 0.45
+  eval_interval: 2           # Evaluate every 2 epochs
+
+# AGGRESSIVE Checkpointing
+logging:
+  save_dir: "/kaggle/working/runs/train_quick"
+  log_interval: 20           # Log less frequently
+  val_interval: 2            # Validate every 2 epochs (faster)
+  save_interval: 5           # Save every 5 epochs (less frequent)
+  save_best: true
+  save_last: true
+  auto_resume: true
+  tensorboard: true
+  
+# Checkpointing
+checkpoints:
+  save_dir: "/kaggle/working/checkpoints_quick"
+  keep_checkpoint_max: 3     # Keep fewer checkpoints
+  save_optimizer: true
+  save_scheduler: true
+  save_epoch: true
+  save_metrics: true
+  
+# Hardware Optimization
+hardware:
+  device: "cuda"
+  gpu_ids: [0]
+  num_gpus: 1
+  pin_memory: true
+  persistent_workers: false  # Don't persist for short training
+  prefetch_factor: 2
+  
+# Reproducibility
+seed: 42
+deterministic: false
+
+# ULTRA FAST MODE SUMMARY:
+# - Dataset: 20% subset (~1200 images instead of 6065)
+# - Epochs: 20 (instead of 50-100)
+# - Image size: 512 (instead of 640)
+# - Batch: 32 (larger for speed)
+# - Augmentations: Minimal
+# - Validation: Every 2 epochs
+#
+# EXPECTED TIME: 2-3 hours on T4 GPU (vs 25-75 hours full training)
+# EXPECTED mAP: ~0.65-0.75 (lower due to less data, but proves concept)
+#
+# USE THIS FOR:
+# - Quick testing if everything works
+# - Debugging training pipeline
+# - Verifying code changes
+# - Fast iteration on hyperparameters
+# - Demo/presentation with quick results
+#
+# AFTER SUCCESS, SWITCH TO: train_config_fast.yaml for full training
