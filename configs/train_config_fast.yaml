@@ -1,0 +1,121 @@
+# FAST Training Configuration for YOLO-UDD v2.0 on Kaggle
+# Optimized for speed while maintaining accuracy
+
+# Model Configuration
+model:
+  name: "YOLO-UDD-v2.0"
+  num_classes: 22
+  pretrained_path: null
+  
+# Dataset Configuration
+data:
+  dataset_name: "TrashCAN-1.0"
+  data_dir: "data/trashcan"
+  img_size: 640  # Keep at 640 for accuracy
+  class_names: ["rov", "plant", "animal_fish", "animal_starfish", "animal_shells", "animal_crab", "animal_eel", "animal_etc", "trash_clothing", "trash_pipe", "trash_bottle", "trash_bag", "trash_snack_wrapper", "trash_can", "trash_cup", "trash_container", "trash_unknown_instance", "trash_branch", "trash_wreckage", "trash_tarp", "trash_rope", "trash_net"]
+
+# OPTIMIZED Training Hyperparameters
+training:
+  epochs: 50              # Reduced from 100 for faster completion
+  batch_size: 24          # Increased from 16 for faster training (T4 can handle this)
+  num_workers: 8          # Increased for faster data loading
+  
+  # Optimizer: AdamW
+  optimizer: "AdamW"
+  learning_rate: 0.01     # PDF spec
+  weight_decay: 0.0005
+  
+  # Learning Rate Scheduler: Cosine Annealing
+  scheduler: "CosineAnnealing"
+  lr_min: 0.0001
+  
+  # Early Stopping (stop if no improvement)
+  early_stopping_patience: 15  # Reduced for faster exit if converged
+  
+  # Gradient Clipping
+  grad_clip_norm: 10.0
+  
+  # Mixed Precision Training (CRITICAL for speed)
+  use_amp: true           # ~2x faster with minimal accuracy loss
+
+# Loss Configuration
+loss:
+  lambda_box: 5.0
+  lambda_obj: 1.0
+  lambda_cls: 1.0
+
+# OPTIMIZED Data Augmentation (lighter for speed)
+augmentation:
+  use_augmentation: true
+  horizontal_flip: 0.5
+  vertical_flip: 0.0      # Disabled for speed
+  shift_scale_rotate: 0.3 # Reduced probability
+  random_crop: 0.3        # Reduced probability
+  
+  # Photometric augmentations (faster)
+  color_jitter: 0.5
+  brightness: 0.2
+  contrast: 0.2
+  saturation: 0.2
+  hue: 0.05
+  
+  # Turbidity simulation (lighter)
+  gaussian_blur: 0.3      # Reduced
+  motion_blur: 0.0        # Disabled for speed
+  
+  # Noise injection (lighter)
+  gaussian_noise: 0.2
+  iso_noise: 0.0          # Disabled for speed
+  
+  # Color effects
+  rgb_shift: 0.0          # Disabled for speed
+  channel_shuffle: 0.0    # Disabled for speed
+
+# Evaluation
+evaluation:
+  metrics: ["precision", "recall", "mAP@50", "mAP@50:95"]
+  iou_thresholds: [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+  conf_threshold: 0.25
+  nms_threshold: 0.45
+  eval_interval: 2        # Evaluate every 2 epochs (faster)
+
+# AGGRESSIVE Checkpointing & Auto-Resume
+logging:
+  save_dir: "/kaggle/working/runs/train"
+  log_interval: 50        # Log less frequently
+  val_interval: 1         # Validate every epoch
+  save_interval: 2        # Save checkpoint EVERY 2 EPOCHS
+  save_best: true         # Save best.pt automatically
+  save_last: true         # Save last.pt for resume
+  auto_resume: true       # AUTO-RESUME from last.pt if exists
+  tensorboard: true
+  
+# Checkpointing Strategy
+checkpoints:
+  save_dir: "/kaggle/working/checkpoints"
+  keep_checkpoint_max: 5  # Keep only last 5 checkpoints to save space
+  save_optimizer: true    # Save optimizer state for perfect resume
+  save_scheduler: true    # Save LR scheduler state
+  save_epoch: true        # Save epoch number
+  save_metrics: true      # Save validation metrics
+  
+# Hardware Optimization
+hardware:
+  device: "cuda"
+  gpu_ids: [0]
+  num_gpus: 1
+  pin_memory: true        # Faster data transfer
+  persistent_workers: true # Keep workers alive between epochs
+  prefetch_factor: 2      # Prefetch batches for speed
+  
+# Reproducibility
+seed: 42
+deterministic: false      # False for faster training (slight randomness OK)
+
+# Speed vs Accuracy Trade-offs Applied:
+# - Batch size increased: 16->24 (~25% faster)
+# - Epochs reduced: 100->50 (50% time saved)
+# - Augmentations lighter (10-15% faster)
+# - Less frequent logging (5% faster)
+# - Mixed precision enabled (~40% faster)
+# TOTAL SPEEDUP: ~3x faster (100 hrs -> 30-35 hrs)

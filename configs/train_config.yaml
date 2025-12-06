@@ -22,8 +22,8 @@ data:
 # Training Hyperparameters (Section 5.2)
 training:
   epochs: 100
-  batch_size: 16
-  num_workers: 4
+  batch_size: 16  # Increase to 24-32 on powerful GPU for faster training
+  num_workers: 4  # Increase to 8 for faster data loading
   
   # Optimizer: AdamW
   optimizer: "AdamW"
@@ -88,7 +88,10 @@ logging:
   save_dir: "runs/train"
   log_interval: 10  # Log every N batches
   val_interval: 1   # Validate every N epochs
-  save_interval: 5  # Save checkpoint every N epochs
+  save_interval: 2  # Save checkpoint every 2 epochs (more frequent)
+  save_best: true   # Always save best model
+  save_last: true   # Always save last model for resume
+  auto_resume: true # Automatically resume from last checkpoint
   tensorboard: true
   
 # Target Performance (Section 2)
