@@ -21,6 +21,7 @@ from models import build_yolo_udd
 from data.dataset import create_dataloaders
 from utils.metrics import compute_metrics
 from utils.loss import YOLOUDDLoss
+from utils.nms import batched_nms
 
 
 class Trainer:
@@ -166,8 +167,16 @@ class Trainer:
             
             total_loss += loss.item()
             
+            # Decode predictions to bounding boxes with NMS
+            decoded_predictions = batched_nms(
+                predictions, 
+                conf_threshold=0.001,  # Very low threshold to catch any detections
+                iou_threshold=0.65,
+                max_det=300
+            )
+            
             # Store predictions for metrics
-            all_predictions.extend(predictions)
+            all_predictions.extend(decoded_predictions)
             all_targets.extend(list(zip(bboxes, labels)))
         
         avg_loss = total_loss / len(self.dataloaders['val'])
