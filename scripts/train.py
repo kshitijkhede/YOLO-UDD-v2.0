@@ -170,7 +170,7 @@ class Trainer:
             # Decode predictions to bounding boxes with NMS
             decoded_predictions = batched_nms(
                 predictions, 
-                conf_threshold=0.001,  # Very low threshold to catch any detections
+                conf_threshold=0.05,  # Reasonable threshold for faster validation
                 iou_threshold=0.65,
                 max_det=300
             )
