@@ -64,6 +64,10 @@ class Detector:
         # Resize to 640x640
         img = cv2.resize(image, (640, 640))
         
+        # Convert BGR (OpenCV default from cv2.imread) -> RGB so inference
+        # normalization matches training (dataset.py converts BGR->RGB).
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
         # Normalize
         img = img.astype(np.float32) / 255.0
         img = (img - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
