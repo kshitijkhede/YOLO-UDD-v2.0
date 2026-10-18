@@ -200,6 +200,7 @@ class Trainer:
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict(),
             'best_map': self.best_map,
+            'early_stop_counter': self.early_stop_counter,
             'config': self.config
         }
         
@@ -223,6 +224,7 @@ class Trainer:
         self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         self.current_epoch = checkpoint['epoch'] + 1  # Start from next epoch
         self.best_map = checkpoint['best_map']
+        self.early_stop_counter = checkpoint.get('early_stop_counter', 0)
         
         print(f"✅ Resumed from epoch {checkpoint['epoch']}")
         print(f"   Best mAP so far: {self.best_map:.4f}\n")
@@ -241,7 +243,7 @@ class Trainer:
         print(f"Learning rate: {self.config['learning_rate']}")
         print("=" * 80)
         
-        for epoch in range(self.config['epochs']):
+        for epoch in range(self.current_epoch, self.config['epochs']):
             self.current_epoch = epoch
             
             # Train
