@@ -8,7 +8,16 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.utils.tensorboard import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except Exception as _tb_err:  # TensorBoard pulls in TF/JAX which may clash with numpy<2
+    print(f"[warn] TensorBoard unavailable ({type(_tb_err).__name__}); training continues without it.")
+    class SummaryWriter:  # no-op fallback
+        def __init__(self, *a, **k): pass
+        def add_scalar(self, *a, **k): pass
+        def add_scalars(self, *a, **k): pass
+        def flush(self, *a, **k): pass
+        def close(self, *a, **k): pass
 import argparse
 from tqdm import tqdm
 import yaml
