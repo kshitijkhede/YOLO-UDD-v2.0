@@ -27,6 +27,14 @@ class TrashCanDataset(Dataset):
     
     def __init__(self, data_dir, split='train', img_size=640, augment=True):
         self.data_dir = data_dir
+        # TrashCan 1.0 ships only train/val splits. If 'test' is requested but no
+        # test annotation exists, fall back to 'val' so evaluation still runs.
+        if split == 'test':
+            _has_test = (os.path.exists(os.path.join(data_dir, 'instances_test_trashcan.json'))
+                         or os.path.exists(os.path.join(data_dir, 'annotations', 'test.json')))
+            if not _has_test:
+                print("[TrashCanDataset] No test split found; using 'val' for evaluation.")
+                split = 'val'
         self.split = split
         self.img_size = img_size
         self.augment = augment and (split == 'train')

@@ -145,10 +145,11 @@ def main():
     print("=" * 70)
     
     images_dir = dataset_dir / 'images'
-    train_images_dir = images_dir / 'train'
-    val_images_dir = images_dir / 'val'
-    
-    if not images_dir.exists():
+    # Images can live under <dir>/images/<split> OR directly <dir>/<split>
+    train_images_dir = images_dir / 'train' if (images_dir / 'train').exists() else dataset_dir / 'train'
+    val_images_dir = images_dir / 'val' if (images_dir / 'val').exists() else dataset_dir / 'val'
+
+    if not train_images_dir.exists() and not val_images_dir.exists():
         print(f"\n❌ Images directory not found: {images_dir}")
         all_ok = False
     else:
