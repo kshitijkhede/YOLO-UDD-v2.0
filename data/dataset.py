@@ -190,21 +190,21 @@ class TrashCanDataset(Dataset):
             image_id = img_info['id']
             img_filename = img_info['file_name']
             
-            # Load image
-            # Try: data/trashcan/images/train/filename.jpg
-            img_path = os.path.join(self.data_dir, 'images', self.split, img_filename)
-            image = cv2.imread(img_path)
+            # Resolve the image path across common layouts. We check existence with
+            # os.path.exists BEFORE calling cv2.imread so OpenCV doesn't spam
+            # "can't open/read file" warnings for candidate paths that don't exist.
+            image = None
+            for cand in (
+                os.path.join(self.data_dir, 'images', self.split, img_filename),  # <dir>/images/train
+                os.path.join(self.data_dir, self.split, img_filename),            # <dir>/train
+                os.path.join(self.data_dir, img_filename),                        # <dir>/
+            ):
+                if os.path.exists(cand):
+                    image = cv2.imread(cand)
+                    break
+
             if image is None:
-                # Fallback: try data/trashcan/train/filename.jpg
-                img_path = os.path.join(self.data_dir, self.split, img_filename)
-                image = cv2.imread(img_path)
-            if image is None:
-                # Fallback: try data/trashcan/filename.jpg
-                img_path = os.path.join(self.data_dir, img_filename)
-                image = cv2.imread(img_path)
-            
-            if image is None:
-                print(f"Warning: Could not load image {img_path}, using blank image")
+                print(f"Warning: Could not load image {img_filename}, using blank image")
                 image = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
             else:
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
