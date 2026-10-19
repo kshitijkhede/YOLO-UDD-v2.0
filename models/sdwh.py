@@ -213,13 +213,50 @@ class SDWH(nn.Module):
         if self.use_attention:
             x = self.spatial_attentions[level_idx](x)
             x = self.channel_attentions[level_idx](x)
-        
+
         # Generate predictions
-        bbox_pred = self.bbox_heads[level_idx](x)
+        raw_bbox = self.bbox_heads[level_idx](x)
         obj_pred = self.obj_heads[level_idx](x)
         cls_pred = self.cls_heads[level_idx](x)
-        
+
+        bbox_pred = self._decode_bbox(raw_bbox)
+
         return bbox_pred, obj_pred, cls_pred
+
+    def _decode_bbox(self, raw_bbox):
+        """
+        Decode the raw box head output into absolute, image-normalized
+        (x_center, y_center, w, h) in [0, 1].
+
+        A plain conv is translation-equivariant, so it cannot know a cell's
+        position and could only ever regress a single global box. We therefore
+        predict a LOCAL offset within each cell and add the cell's grid
+        coordinate (the standard anchor-free YOLO decode). xy uses the
+        YOLOv5-style grid-sensitivity range (-0.5, 1.5) so a cell can also
+        cover ground truth assigned to its immediate neighbours; wh is a plain
+        sigmoid in (0, 1) of the full image. The result is bounded, which also
+        removes the EIoU blow-up from degenerate (negative/huge) boxes.
+        """
+        B, _, H, W = raw_bbox.shape
+        device = raw_bbox.device
+
+        gy, gx = torch.meshgrid(
+            torch.arange(H, device=device, dtype=raw_bbox.dtype),
+            torch.arange(W, device=device, dtype=raw_bbox.dtype),
+            indexing='ij',
+        )
+        gx = gx.view(1, 1, H, W)
+        gy = gy.view(1, 1, H, W)
+
+        tx = torch.sigmoid(raw_bbox[:, 0:1]) * 2.0 - 0.5
+        ty = torch.sigmoid(raw_bbox[:, 1:2]) * 2.0 - 0.5
+        tw = torch.sigmoid(raw_bbox[:, 2:3])
+        th = torch.sigmoid(raw_bbox[:, 3:4])
+
+        cx = (gx + tx) / W
+        cy = (gy + ty) / H
+
+        return torch.cat([cx, cy, tw, th], dim=1)
     
     def forward(self, features):
         """

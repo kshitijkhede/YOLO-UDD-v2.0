@@ -115,6 +115,10 @@ def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None
                     'box': box.cpu().numpy() if torch.is_tensor(box) else box
                 })
     
+    # Running TP/FP tallies at IoU=0.5 for an honest precision/recall pair.
+    tp50_total = 0.0
+    fp50_total = 0.0
+
     # Compute AP for each class and IoU threshold
     aps = {}
     for iou_thresh in iou_thresholds:
@@ -170,26 +174,29 @@ def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None
             # Compute precision and recall
             tp_cumsum = np.cumsum(tp)
             fp_cumsum = np.cumsum(fp)
-            
+
             recalls = tp_cumsum / len(gts) if len(gts) > 0 else np.zeros_like(tp_cumsum)
             precisions = tp_cumsum / (tp_cumsum + fp_cumsum + 1e-7)
-            
+
             # Compute AP
             ap = compute_ap(recalls, precisions)
             aps[iou_thresh].append(ap)
+
+            # Tally real TP/FP at IoU=0.5 for the reported precision/recall.
+            if np.isclose(iou_thresh, 0.5):
+                tp50_total += float(tp.sum())
+                fp50_total += float(fp.sum())
     
     # Calculate summary metrics
     map_50 = np.mean(aps[0.5]) if 0.5 in aps and len(aps[0.5]) > 0 else 0.0
     map_75 = np.mean(aps[0.75]) if 0.75 in aps and len(aps[0.75]) > 0 else 0.0
     map_50_95 = np.mean([np.mean(v) for v in aps.values() if len(v) > 0]) if aps else 0.0
     
-    # Calculate overall precision and recall
-    total_tp = sum(len([d for d in all_detections[cls] if d]) for cls in all_detections)
+    # Overall precision / recall from real TP/FP at IoU=0.5 (a detection is a
+    # true positive only if it matched an unclaimed GT above the IoU threshold).
     total_gt = sum(len(all_ground_truths[cls]) for cls in all_ground_truths)
-    total_det = sum(len(all_detections[cls]) for cls in all_detections)
-    
-    precision = total_tp / total_det if total_det > 0 else 0.0
-    recall = total_tp / total_gt if total_gt > 0 else 0.0
+    precision = tp50_total / (tp50_total + fp50_total) if (tp50_total + fp50_total) > 0 else 0.0
+    recall = tp50_total / total_gt if total_gt > 0 else 0.0
     
     return {
         'precision': precision,

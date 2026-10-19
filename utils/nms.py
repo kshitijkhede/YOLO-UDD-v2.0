@@ -132,7 +132,9 @@ def batched_nms(predictions, conf_threshold=0.25, iou_threshold=0.5, max_det=300
         B, _, H, W = bbox_pred.shape
         C = cls_pred.shape[1]
         bbox = bbox_pred.permute(0, 2, 3, 1).reshape(B, -1, 4)
-        obj = torch.sigmoid(torch.clamp(obj_pred, min=-50, max=50)).permute(0, 2, 3, 1).reshape(B, -1)
+        # obj_pred is ALREADY sigmoid-activated by the objectness head (do not
+        # sigmoid again). cls_pred are raw logits, so they do get a sigmoid here.
+        obj = obj_pred.clamp(0, 1).permute(0, 2, 3, 1).reshape(B, -1)
         cls = torch.sigmoid(cls_pred).permute(0, 2, 3, 1).reshape(B, -1, C)
 
         all_boxes.append(bbox)

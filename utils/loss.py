@@ -153,12 +153,11 @@ class YOLOUDDLoss(nn.Module):
                 total_pos_samples += pos_mask_flat.sum().item()
             
             # 2. Objectness Loss (all samples)
-            # Clamp raw predictions before sigmoid to prevent NaN/Inf
-            obj_pred_clamped = torch.clamp(obj_pred, min=-50, max=50)
-            obj_pred_sigmoid = torch.sigmoid(obj_pred_clamped)
-            
-            # Ensure strict [0, 1] range for both inputs
-            obj_pred_sigmoid = torch.clamp(obj_pred_sigmoid, min=1e-7, max=1.0-1e-7)
+            # NOTE: the objectness head already ends in nn.Sigmoid(), so obj_pred
+            # is ALREADY a probability in [0, 1]. Do NOT sigmoid again (that double
+            # application squashes targets into [0.5, 0.73] and cripples learning).
+            # Just clamp into the open interval for a numerically safe BCELoss.
+            obj_pred_sigmoid = torch.clamp(obj_pred, min=1e-7, max=1.0-1e-7)
             obj_target_safe = torch.clamp(obj_target, min=0.0, max=1.0)
             
             # Handle NaN/Inf values
