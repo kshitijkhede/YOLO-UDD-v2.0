@@ -5,6 +5,22 @@ Implements IoU-based NMS for post-processing predictions
 
 import torch
 
+# torchvision provides a fused (C++/CUDA) NMS kernel. We use it when available
+# because the pure-Python fallback below is O(N^2) with per-iteration GPU->CPU
+# syncs, which is catastrophically slow when an (early / untrained) model emits
+# thousands of candidate boxes per image.
+try:
+    from torchvision.ops import batched_nms as _tv_batched_nms
+    _HAS_TV = True
+except Exception:  # torchvision missing / broken
+    _HAS_TV = False
+
+
+def _xywh_to_xyxy(b):
+    """[N,4] (x_center, y_center, w, h) -> (x1, y1, x2, y2)."""
+    x, y, w, h = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
+    return torch.stack([x - w / 2, y - h / 2, x + w / 2, y + h / 2], dim=1)
+
 
 def box_iou(boxes1, boxes2):
     """
@@ -87,19 +103,23 @@ def nms(boxes, scores, iou_threshold=0.5):
     return torch.tensor(keep, dtype=torch.long)
 
 
-def batched_nms(predictions, conf_threshold=0.25, iou_threshold=0.5, max_det=300):
+def batched_nms(predictions, conf_threshold=0.25, iou_threshold=0.5, max_det=300,
+                max_nms=3000):
     """
-    Apply NMS to batched predictions
-    
+    Apply NMS to batched predictions.
+
     Args:
         predictions: List of (bbox, obj, cls) tensors for each scale
         conf_threshold: Minimum confidence threshold
         iou_threshold: IoU threshold for NMS
-        max_det: Maximum number of detections per image
-    
+        max_det: Maximum number of detections kept per image
+        max_nms: Max candidate boxes fed into NMS per image (capped by score).
+            Critical early in training, when an untrained model passes almost
+            every anchor through the confidence filter.
+
     Returns:
-        detections: List of detections per image, each containing:
-            - boxes: [N, 4] filtered bounding boxes
+        detections: List of detections per image, each a dict with:
+            - boxes: [N, 4] in (x_center, y_center, w, h) format
             - scores: [N] confidence scores
             - classes: [N] class predictions
     """
@@ -107,82 +127,79 @@ def batched_nms(predictions, conf_threshold=0.25, iou_threshold=0.5, max_det=300
     all_boxes = []
     all_obj_scores = []
     all_cls_scores = []
-    all_cls_indices = []
-    
+
     for bbox_pred, obj_pred, cls_pred in predictions:
         B, _, H, W = bbox_pred.shape
-        
-        # Reshape predictions
+        C = cls_pred.shape[1]
         bbox = bbox_pred.permute(0, 2, 3, 1).reshape(B, -1, 4)
         obj = torch.sigmoid(torch.clamp(obj_pred, min=-50, max=50)).permute(0, 2, 3, 1).reshape(B, -1)
-        cls = torch.sigmoid(cls_pred).permute(0, 2, 3, 1).reshape(B, -1, cls_pred.shape[1])
-        
+        cls = torch.sigmoid(cls_pred).permute(0, 2, 3, 1).reshape(B, -1, C)
+
         all_boxes.append(bbox)
         all_obj_scores.append(obj)
         all_cls_scores.append(cls)
-    
+
     # Concatenate all scales
-    boxes = torch.cat(all_boxes, dim=1)  # [B, N_total, 4]
-    obj_scores = torch.cat(all_obj_scores, dim=1)  # [B, N_total]
-    cls_scores = torch.cat(all_cls_scores, dim=1)  # [B, N_total, C]
-    
-    # Get class predictions and scores
+    boxes = torch.cat(all_boxes, dim=1)        # [B, N_total, 4]
+    obj_scores = torch.cat(all_obj_scores, dim=1)   # [B, N_total]
+    cls_scores = torch.cat(all_cls_scores, dim=1)   # [B, N_total, C]
+
+    # Class prediction + combined confidence (objectness * class score)
     cls_max_scores, cls_indices = torch.max(cls_scores, dim=2)  # [B, N_total]
-    
-    # Combined confidence (objectness * class score)
     conf_scores = obj_scores * cls_max_scores
-    
-    # Process each image in batch
+
+    def _empty():
+        return {
+            'boxes': torch.empty(0, 4, device=boxes.device),
+            'scores': torch.empty(0, device=boxes.device),
+            'classes': torch.empty(0, dtype=torch.long, device=boxes.device),
+        }
+
     batch_detections = []
     for b in range(boxes.shape[0]):
         # Filter by confidence
         mask = conf_scores[b] >= conf_threshold
-        if mask.sum() == 0:
-            batch_detections.append({
-                'boxes': torch.empty(0, 4, device=boxes.device),
-                'scores': torch.empty(0, device=boxes.device),
-                'classes': torch.empty(0, dtype=torch.long, device=boxes.device)
-            })
+        if not bool(mask.any()):
+            batch_detections.append(_empty())
             continue
-        
+
         img_boxes = boxes[b][mask]
         img_scores = conf_scores[b][mask]
         img_classes = cls_indices[b][mask]
-        
-        # Apply NMS per class
-        keep_indices = []
-        for c in range(cls_scores.shape[2]):
-            class_mask = img_classes == c
-            if class_mask.sum() == 0:
-                continue
-            
-            class_boxes = img_boxes[class_mask]
-            class_scores = img_scores[class_mask]
-            class_indices = torch.where(class_mask)[0]
-            
-            # Apply NMS
-            nms_indices = nms(class_boxes, class_scores, iou_threshold)
-            keep_indices.append(class_indices[nms_indices])
-        
-        if len(keep_indices) > 0:
-            keep_indices = torch.cat(keep_indices)
-            
-            # Sort by score and limit to max_det
-            sorted_indices = torch.argsort(img_scores[keep_indices], descending=True)[:max_det]
-            final_indices = keep_indices[sorted_indices]
-            
-            batch_detections.append({
-                'boxes': img_boxes[final_indices],
-                'scores': img_scores[final_indices],
-                'classes': img_classes[final_indices]
-            })
+
+        # Cap the number of candidates BEFORE NMS (highest-scoring first). This
+        # bounds cost regardless of how many anchors slip past conf_threshold.
+        if img_scores.numel() > max_nms:
+            top = torch.topk(img_scores, max_nms).indices
+            img_boxes, img_scores, img_classes = img_boxes[top], img_scores[top], img_classes[top]
+
+        xyxy = _xywh_to_xyxy(img_boxes)
+
+        if _HAS_TV:
+            # Class-aware NMS in one fused kernel; returns indices sorted by score.
+            keep = _tv_batched_nms(xyxy, img_scores, img_classes, iou_threshold)
         else:
-            batch_detections.append({
-                'boxes': torch.empty(0, 4, device=boxes.device),
-                'scores': torch.empty(0, device=boxes.device),
-                'classes': torch.empty(0, dtype=torch.long, device=boxes.device)
-            })
-    
+            # Pure-Python fallback (slow): per-class NMS on xywh boxes.
+            keep_parts = []
+            for c in torch.unique(img_classes):
+                cm = img_classes == c
+                ci = torch.where(cm)[0]
+                k = nms(img_boxes[cm], img_scores[cm], iou_threshold)
+                keep_parts.append(ci[k])
+            if keep_parts:
+                keep = torch.cat(keep_parts)
+                keep = keep[torch.argsort(img_scores[keep], descending=True)]
+            else:
+                batch_detections.append(_empty())
+                continue
+
+        keep = keep[:max_det]
+        batch_detections.append({
+            'boxes': img_boxes[keep],
+            'scores': img_scores[keep],
+            'classes': img_classes[keep],
+        })
+
     return batch_detections
 
 

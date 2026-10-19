@@ -127,26 +127,35 @@ def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None
             # Sort detections by confidence
             dets = sorted(all_detections[cls], key=lambda x: x['score'], reverse=True)
             gts = all_ground_truths[cls]
-            
+
+            # Pre-index ground truths by image so matching is O(D) instead of
+            # O(D*G) (re-scanning every GT for every detection is pathologically
+            # slow early in training when detections number in the hundreds of
+            # thousands). Each entry caches a [G_img, 4] tensor of GT boxes.
+            gts_by_img = defaultdict(list)
+            for gt in gts:
+                gts_by_img[gt['img_id']].append(gt['box'])
+            gt_tensors = {
+                img: torch.tensor(np.stack(boxes)).float()
+                for img, boxes in gts_by_img.items()
+            }
+
             # Track which ground truths have been matched
             matched = defaultdict(set)  # img_id -> set of matched gt indices
-            
+
             tp = np.zeros(len(dets))
             fp = np.zeros(len(dets))
-            
+
             for det_idx, det in enumerate(dets):
                 img_id = det['img_id']
-                det_box = torch.tensor(det['box']).unsqueeze(0)
-                
-                # Get ground truths for this image and class
-                img_gts = [gt for gt in gts if gt['img_id'] == img_id]
-                
-                if len(img_gts) == 0:
+                gt_boxes = gt_tensors.get(img_id)
+
+                if gt_boxes is None:
                     fp[det_idx] = 1
                     continue
-                
-                # Compute IoU with all ground truths
-                gt_boxes = torch.tensor([gt['box'] for gt in img_gts])
+
+                det_box = torch.tensor(det['box']).unsqueeze(0).float()
+                # Compute IoU with all ground truths for this image
                 ious = box_iou_xyxy(det_box, gt_boxes).squeeze(0)
                 
                 # Find best matching ground truth
