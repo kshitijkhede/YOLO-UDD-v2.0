@@ -143,29 +143,32 @@ def assign_targets_simple(predictions, target_boxes, target_labels, num_classes=
 
 def build_targets(predictions, target_boxes, target_labels, img_size=640, num_classes=3):
     """
-    Build targets for all scales with proper normalization
-    
+    Build targets for all scales.
+
+    IMPORTANT: the dataset (TrashCanDataset) already emits boxes in YOLO format
+    — (x_center, y_center, w, h) normalized to [0, 1]. They must NOT be divided
+    by img_size again; doing so collapses every target into a ~0.0003-sized box
+    at the origin and assigns all objects to grid cell (0, 0), which makes the
+    box loss unlearnable and mAP identically zero. We pass the boxes through
+    as-is. (`img_size` is retained only for backwards-compatible signature.)
+
     Args:
         predictions: Model predictions at different scales
-        target_boxes: List of target boxes per image (absolute coordinates)
+        target_boxes: List of per-image boxes, already normalized to [0, 1]
         target_labels: List of target labels per image
-        img_size: Input image size
+        img_size: Unused (kept for signature compatibility)
         num_classes: Number of classes
-    
+
     Returns:
         Dictionary of assigned targets
     """
-    # Normalize target boxes to [0, 1]
     normalized_boxes = []
     for boxes in target_boxes:
         if len(boxes) > 0:
-            norm_boxes = boxes.clone().float()
-            norm_boxes[:, [0, 2]] /= img_size  # Normalize x, w
-            norm_boxes[:, [1, 3]] /= img_size  # Normalize y, h
-            normalized_boxes.append(norm_boxes)
+            normalized_boxes.append(boxes.clone().float())
         else:
             normalized_boxes.append(torch.empty(0, 4))
-    
+
     return assign_targets_simple(predictions, normalized_boxes, target_labels, num_classes)
 
 
