@@ -281,7 +281,7 @@ class YOLOUD(nn.Module):
     def load_pretrained(self, path):
         """Load pretrained weights from COCO"""
         try:
-            state_dict = torch.load(path, map_location='cpu')
+            state_dict = torch.load(path, map_location='cpu', weights_only=False)
             self.load_state_dict(state_dict, strict=False)
             print(f"Loaded pretrained weights from {path}")
         except Exception as e:

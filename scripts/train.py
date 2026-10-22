@@ -226,7 +226,10 @@ class Trainer:
     def load_checkpoint(self, checkpoint_path):
         """Load checkpoint to resume training"""
         print(f"\n🔄 Resuming from checkpoint: {checkpoint_path}")
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        # weights_only=False: our checkpoint holds the config dict and optimizer
+        # state, not just tensors. PyTorch >=2.6 defaults weights_only=True, which
+        # would refuse to unpickle these and break --resume.
+        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

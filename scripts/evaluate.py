@@ -30,7 +30,7 @@ class Evaluator:
         
         # Load model
         print(f"Loading model from {weights_path}...")
-        checkpoint = torch.load(weights_path, map_location=self.device)
+        checkpoint = torch.load(weights_path, map_location=self.device, weights_only=False)
         
         # Rebuild the exact architecture this checkpoint was trained with
         # (so ablation checkpoints — with some modules off — load cleanly).
