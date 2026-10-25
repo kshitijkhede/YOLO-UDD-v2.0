@@ -81,7 +81,8 @@ configs/     train_config*.yaml                          hyperparameters
 notebooks/   Kaggle training notebooks (custom model + YOLOv9c)
 ```
 
-Deep dive on architecture, concepts and design choices: **[PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md)**.
+**Full project write-up** — architecture layer-by-layer, theory from scratch, the TAFM module, the
+development journey, results, and an interview/viva kit: **[DOCUMENTATION.md](DOCUMENTATION.md)**.
 
 ## References
 
