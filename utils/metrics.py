@@ -70,10 +70,11 @@ def compute_ap(recall, precision):
     return ap
 
 
-def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None):
+def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None,
+                         pr_conf=0.25):
     """
     Compute COCO-style metrics from detections and ground truth
-    
+
     Args:
         detections: List of detection dicts per image, each with:
             - 'boxes': [N, 4] in (x, y, w, h) format
@@ -84,7 +85,10 @@ def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None
             - labels: [M] class indices
         num_classes: Number of classes
         iou_thresholds: List of IoU thresholds (default: 0.5 to 0.95 step 0.05)
-    
+        pr_conf: Confidence threshold for the reported precision/recall pair.
+            mAP integrates the full PR curve (needs all low-conf detections),
+            but precision/recall are only meaningful at a real operating point.
+
     Returns:
         dict: Metrics including precision, recall, mAP@50, mAP@50:95
     """
@@ -115,10 +119,6 @@ def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None
                     'box': box.cpu().numpy() if torch.is_tensor(box) else box
                 })
     
-    # Running TP/FP tallies at IoU=0.5 for an honest precision/recall pair.
-    tp50_total = 0.0
-    fp50_total = 0.0
-
     # Compute AP for each class and IoU threshold
     aps = {}
     for iou_thresh in iou_thresholds:
@@ -181,22 +181,44 @@ def compute_metrics_coco(detections, targets, num_classes=3, iou_thresholds=None
             # Compute AP
             ap = compute_ap(recalls, precisions)
             aps[iou_thresh].append(ap)
-
-            # Tally real TP/FP at IoU=0.5 for the reported precision/recall.
-            if np.isclose(iou_thresh, 0.5):
-                tp50_total += float(tp.sum())
-                fp50_total += float(fp.sum())
     
     # Calculate summary metrics
     map_50 = np.mean(aps[0.5]) if 0.5 in aps and len(aps[0.5]) > 0 else 0.0
     map_75 = np.mean(aps[0.75]) if 0.75 in aps and len(aps[0.75]) > 0 else 0.0
     map_50_95 = np.mean([np.mean(v) for v in aps.values() if len(v) > 0]) if aps else 0.0
     
-    # Overall precision / recall from real TP/FP at IoU=0.5 (a detection is a
-    # true positive only if it matched an unclaimed GT above the IoU threshold).
+    # --- Precision / recall at a real operating confidence threshold ---------
+    # Count TP/FP at IoU=0.5 using only detections with score >= pr_conf, so the
+    # reported pair reflects a usable deployment threshold rather than the flood
+    # of low-confidence boxes needed for the mAP curve.
     total_gt = sum(len(all_ground_truths[cls]) for cls in all_ground_truths)
-    precision = tp50_total / (tp50_total + fp50_total) if (tp50_total + fp50_total) > 0 else 0.0
-    recall = tp50_total / total_gt if total_gt > 0 else 0.0
+    tp_pr, fp_pr = 0, 0
+    for cls in range(num_classes):
+        if cls not in all_detections:
+            continue
+        dets = sorted((d for d in all_detections[cls] if d['score'] >= pr_conf),
+                      key=lambda x: x['score'], reverse=True)
+        gts = all_ground_truths.get(cls, [])
+        gts_by_img = defaultdict(list)
+        for gt in gts:
+            gts_by_img[gt['img_id']].append(gt['box'])
+        gt_tensors = {img: torch.tensor(np.stack(b)).float()
+                      for img, b in gts_by_img.items()}
+        matched = defaultdict(set)
+        for det in dets:
+            gb = gt_tensors.get(det['img_id'])
+            if gb is None:
+                fp_pr += 1
+                continue
+            db = torch.tensor(det['box']).unsqueeze(0).float()
+            miou, midx = box_iou_xyxy(db, gb).squeeze(0).max(dim=0)
+            if miou >= 0.5 and midx.item() not in matched[det['img_id']]:
+                tp_pr += 1
+                matched[det['img_id']].add(midx.item())
+            else:
+                fp_pr += 1
+    precision = tp_pr / (tp_pr + fp_pr) if (tp_pr + fp_pr) > 0 else 0.0
+    recall = tp_pr / total_gt if total_gt > 0 else 0.0
     
     return {
         'precision': precision,
