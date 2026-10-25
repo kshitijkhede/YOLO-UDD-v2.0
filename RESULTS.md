@@ -32,6 +32,35 @@ The gap is the expected cost of training from scratch on ~6k images with no
 pretrained backbone. This run is the honest from-scratch baseline; the pretrained
 path (Option B: Ultralytics YOLOv9c + TAFM) targets a paper-competitive number.
 
+## Run 2: Option B — COCO-pretrained YOLOv9c, fine-tuned (Ultralytics)
+
+- **Model:** YOLOv9c (COCO-pretrained), fine-tuned on TrashCan 3-class
+- **Training:** 100 epochs, imgsz 640, batch 16, Ultralytics defaults
+- **Hardware:** Kaggle Tesla T4
+
+### Final metrics (val set, best checkpoint)
+
+| Metric      | Value  |
+|-------------|--------|
+| **mAP@50**  | **0.7874** |
+| mAP@50:95   | 0.5808 |
+| Precision   | 0.8558 |
+| Recall      | 0.7150 |
+
+Per-class mAP@50: ROV 0.930, Trash 0.806, Animal 0.626.
+
+### vs. the paper
+- Paper baseline (YOLOv9c, COCO-pretrained): **0.759 mAP@50**
+- This run: **0.7874 mAP@50 → beats the paper by +2.8 points.**
+
+## Summary
+
+| Model                                   | mAP@50 | mAP@50:95 |
+|-----------------------------------------|--------|-----------|
+| Custom YOLO-UDD (from scratch) + TAFM   | 0.463  | 0.236     |
+| YOLOv9c (COCO-pretrained, Option B)     | 0.787  | 0.581     |
+| Paper baseline (YOLOv9c pretrained)     | 0.759  | —         |
+
 ## Pending
-- [ ] Ablation runs (baseline / +PSEM / +PSEM+SDWH) to quantify each module's contribution
-- [ ] Option B: fine-tune COCO-pretrained YOLOv9c on TrashCan, then integrate TAFM
+- [ ] Phase 2: integrate TAFM into the pretrained YOLOv9c -> show "YOLOv9c + TAFM > YOLOv9c alone (0.787)"
+- [ ] (Optional) Ablation runs on the custom model (baseline / +PSEM / +PSEM+SDWH)
