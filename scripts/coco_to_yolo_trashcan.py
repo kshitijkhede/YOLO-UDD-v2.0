@@ -20,6 +20,7 @@ Usage:
 
 import os
 import json
+import shutil
 import argparse
 
 
@@ -92,16 +93,14 @@ def convert_split(dataset_dir, out_dir, split):
     lbl_dir = os.path.join(out_dir, "labels", split)
     os.makedirs(lbl_dir, exist_ok=True)
 
-    # symlink images dir (no 190MB copy); fall back to recording the real path
-    link_parent = os.path.join(out_dir, "images")
-    os.makedirs(link_parent, exist_ok=True)
-    link_path = os.path.join(link_parent, split)
-    if not os.path.exists(link_path):
-        try:
-            os.symlink(img_dir, link_path)
-        except OSError:
-            # symlink not permitted: data.yaml will point at the real dir instead
-            link_path = img_dir
+    # COPY images into out_dir/images/<split>. We copy real files (not a symlink)
+    # because Ultralytics resolves symlinks to their real path and then derives
+    # label paths by swapping '/images/' -> '/labels/'; the source images live
+    # under '.../<split>/' (no 'images' component), so a symlink breaks label
+    # discovery. Copying keeps the images/ <-> labels/ parallel layout intact.
+    img_out = os.path.join(out_dir, "images", split)
+    os.makedirs(img_out, exist_ok=True)
+    shutil.copytree(img_dir, img_out, dirs_exist_ok=True)
 
     n_boxes, n_skipped, n_imgs = 0, 0, 0
     for img_id, im in images.items():
@@ -134,7 +133,7 @@ def convert_split(dataset_dir, out_dir, split):
 
     print(f"[{split}] wrote {n_imgs} label files, {n_boxes} boxes "
           f"({n_skipped} out-of-config boxes skipped)")
-    return link_path
+    return img_out
 
 
 def main():
@@ -148,12 +147,13 @@ def main():
     train_imgs = convert_split(args.dataset_dir, args.out_dir, "train")
     val_imgs = convert_split(args.dataset_dir, args.out_dir, "val")
 
-    # data.yaml: use absolute image dirs so it works regardless of symlink support
+    # data.yaml: paths relative to out_dir so the images/ <-> labels/ layout
+    # resolves cleanly for Ultralytics.
     data_yaml = os.path.join(args.out_dir, "data.yaml")
     with open(data_yaml, "w") as f:
         f.write(f"path: {args.out_dir}\n")
-        f.write(f"train: {train_imgs}\n")
-        f.write(f"val: {val_imgs}\n")
+        f.write("train: images/train\n")
+        f.write("val: images/val\n")
         f.write(f"nc: {len(CLASS_NAMES)}\n")
         f.write(f"names: {CLASS_NAMES}\n")
     print(f"\nWrote {data_yaml}")
