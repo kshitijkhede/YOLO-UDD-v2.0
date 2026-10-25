@@ -63,6 +63,9 @@ DATASET_STATUS.md
 PROJECT_STATUS_REPORT.md
 README_DATASET_ISSUE.md
 
+# Research papers / large reference PDFs (kept locally, not in repo)
+*.pdf
+
 # OS
 .DS_Store
 Thumbs.db

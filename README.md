@@ -1,101 +1,97 @@
-# YOLO-UDD v2.0: A Turbidity-Adaptive Architecture for Underwater Debris Detection
+# YOLO-UDD v2.0: Turbidity-Adaptive Underwater Debris Detection
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-A deep-learning object detector for **underwater debris detection** on the **TrashCan 1.0**
-dataset. It extends a YOLO-style detector with three feature-processing modules — **PSEM**
-(feature fusion), **SDWH** (attention detection head), and a **novel TAFM** (Turbidity-
-Adaptive Fusion Module) that adapts the network to how murky the water is.
+Deep-learning object detection for **underwater debris** on the **TrashCan 1.0** dataset
+(3 classes: Trash, Animal, ROV). The project builds a custom YOLO-style detector with a
+**novel Turbidity-Adaptive Fusion Module (TAFM)**, and benchmarks it against a
+COCO-pretrained **YOLOv9c** baseline — exceeding the reference paper's reported result.
 
-> Read **[`PROJECT_DOCUMENTATION.md`](PROJECT_DOCUMENTATION.md)** — it explains every part
-> and concept of this project end to end (architecture, papers, novelty, metrics, interview
-> prep).
->
-> Finishing the project? Follow **[`COMPLETION_PLAN.md`](COMPLETION_PLAN.md)** — the
-> step-by-step roadmap from "architecture built" to "results + ablation."
+## Results
 
----
+Evaluated on the TrashCan 1.0 validation set (1,147 images).
+
+| Model | mAP@50 | mAP@50:95 | Notes |
+|-------|:------:|:---------:|-------|
+| Reference paper (YOLOv9c, pretrained) | 0.759 | — | Samanth et al. 2025 baseline |
+| **YOLOv9c fine-tuned (this work)** | **0.787** | **0.581** | **exceeds the paper baseline** |
+| Custom YOLO-UDD + TAFM (from scratch) | 0.463 | 0.236 | novel architecture, no pretraining |
+
+Per-class mAP@50 (YOLOv9c): ROV 0.930, Trash 0.806, Animal 0.626.
+Full details in **[RESULTS.md](RESULTS.md)**.
+
+## Novel contribution — TAFM
+
+The **Turbidity-Adaptive Fusion Module** ([`models/tafm.py`](models/tafm.py)) estimates a
+per-image turbidity score (0 = clear water … 1 = murky) and blends two learned fusion
+strategies accordingly, so the detector adapts to how murky the water is. This is the
+project's original contribution on top of components adapted from recent literature.
 
 ## Architecture
 
 ```
-Input 640x640 -> Backbone (YOLOv9-style CSP) -> Neck (PSEM + TAFM) -> Head (SDWH) -> Detections
-                                                       |
-                                                       +-> turbidity score (0=clear ... 1=murky)
+Input 640x640 -> Backbone (CSP) -> Neck (PSEM + TAFM) -> Head (SDWH) -> Detections
+                                          |
+                                          +-> turbidity score (0=clear ... 1=murky)
 ```
 
 | Module | Role | Source |
 |--------|------|--------|
-| Backbone | Multi-scale feature extraction | YOLOv9 concept |
-| **PSEM** | Stronger multi-scale fusion (neck) | Li et al. 2025 |
+| Backbone | Multi-scale feature extraction | YOLOv9-style CSP |
+| **PSEM** | Multi-scale feature fusion (neck) | Li et al. 2025 |
 | **TAFM** | **Novel** turbidity-adaptive fusion | This project |
 | **SDWH** | Attention detection head | Li et al. 2025 |
 
-Detects **3 classes**: Trash, Animal, ROV. Predicts at three scales (80x80, 40x40, 20x20).
+Detects 3 classes at three scales (80×80, 40×40, 20×20).
 
-## Status
+## How to run
 
-Architecture OK, forward pass OK, loss/NMS OK, COCO metric wired into validation OK,
-`evaluate.py` and `detect.py` fixed OK, 3-class setting unified OK (see `CHANGELOG.md`,
-Phase 1). The pipeline is now trainable end-to-end. **Still to do:** run full training +
-an ablation to produce real results. **No fully trained model yet.** See `COMPLETION_PLAN.md`.
+Training was done on **Kaggle** (free T4 GPU). Two notebooks in [`notebooks/`](notebooks/):
 
-## Quick start
+- **`YOLO_Ultralytics_TrashCan.ipynb`** — fine-tunes COCO-pretrained YOLOv9c (the 0.787 result).
+- **`YOLO_UDD_Ablation_Kaggle.ipynb`** — trains the custom YOLO-UDD architecture (with TAFM).
+
+Running the custom model locally:
 
 ```bash
-# 1. Install
-python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Prepare data (if raw data is in Supervisely format)
-python scripts/convert_supervisely_to_coco.py --input-dir <raw> --output-dir data/trashcan
+# verify dataset (TrashCan 1.0 in COCO format)
 python scripts/verify_dataset.py --dataset-dir data/trashcan
 
-# 3. Smoke-test the model
-python -c "import torch; from models.yolo_udd import build_yolo_udd; \
-m=build_yolo_udd(num_classes=3).eval(); \
-p,t=m(torch.randn(1,3,640,640)); print('OK turbidity=',float(t),'scales=',len(p))"
-
-# 4. Train (read COMPLETION_PLAN.md first: fix class count + metric hookup)
-python scripts/train.py --config configs/train_config.yaml --data-dir data/trashcan
-
-# 5. Evaluate / detect
-python scripts/evaluate.py --weights runs/train/checkpoints/best.pt --data-dir data/trashcan
-python scripts/detect.py   --weights runs/train/checkpoints/best.pt --source path/to/img.jpg
+# train / evaluate / detect
+python scripts/train.py    --config configs/train_config.yaml --data-dir data/trashcan
+python scripts/evaluate.py --weights runs/train/full/checkpoints/best.pt --data-dir data/trashcan
+python scripts/detect.py   --weights runs/train/full/checkpoints/best.pt --source path/to/img.jpg
 ```
 
-GPU recommended. For quick iteration use `configs/train_config_quick.yaml` (20% subset) or
-`configs/train_config_fast.yaml`. For GPU-free laptops use `configs/train_config_cpu.yaml`.
-Kaggle/Colab notebooks are in `notebooks/`.
+A GPU is recommended. `configs/` has fast / quick / CPU variants for lighter runs.
 
 ## Repository layout
 
 ```
-models/      yolo_udd.py  psem.py  tafm.py  sdwh.py        the architecture
+models/      yolo_udd.py  psem.py  tafm.py  sdwh.py      the architecture
 utils/       loss.py  target_assignment.py  nms.py  metrics.py   training machinery
-data/        dataset.py                                    loader + underwater augmentations
-scripts/     train.py  evaluate.py  detect.py  + convert/verify/subset helpers
-configs/     train_config*.yaml                            hyperparameters (main/fast/quick/cpu)
-notebooks/   Kaggle & Colab training notebooks
-docs/guides/ Kaggle/Colab how-to guides & legacy notes
+data/        dataset.py                                  loader + underwater augmentations
+scripts/     train.py  evaluate.py  detect.py            training/eval/inference
+             coco_to_yolo_trashcan.py  verify_dataset.py  + data helpers
+configs/     train_config*.yaml                          hyperparameters
+notebooks/   Kaggle training notebooks (custom model + YOLOv9c)
 ```
 
-Full file-by-file map: see `PROJECT_DOCUMENTATION.md` section 19.
+Deep dive on architecture, concepts and design choices: **[PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md)**.
 
 ## References
 
 1. Samanth K. et al. (2025). *A Comprehensive Study On Underwater Object Detection Using
-   Deep Neural Networks.* IEEE Access. (dataset, baseline, training recipe)
+   Deep Neural Networks.* IEEE Access. (dataset, baseline)
 2. Li, X. et al. (2025). *Efficient underwater object detection based on feature enhancement
-   and attention detection head.* Scientific Reports. (PSEM & SDWH)
+   and attention detection head.* Scientific Reports. (PSEM, SDWH)
 3. Wang, C.-Y. et al. (2024). *YOLOv9: Learning What You Want to Learn Using Programmable
-   Gradient Information.* arXiv. (backbone concept)
-
-See `PROJECT_DOCUMENTATION.md` sections 16-17 for exactly what was taken from each paper and
-an honest novelty analysis.
+   Gradient Information.* arXiv. (backbone / baseline model)
 
 ## License
 
-MIT - see `LICENSE`.
+MIT — see [LICENSE](LICENSE).
